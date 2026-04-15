@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">VIT Mobile</string>
+    <string name="accessibility_service_label">VIT Mobile テキスト挿入</string>
+    <string name="accessibility_service_description">音声認識した結果をフォーカス中の入力欄に貼り付けます</string>
+</resources>

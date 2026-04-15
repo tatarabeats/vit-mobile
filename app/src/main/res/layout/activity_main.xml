@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:paddingBottom="24dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="1. Groq APIキー"
+            android:textStyle="bold"
+            android:paddingTop="8dp"
+            android:paddingBottom="4dp" />
+
+        <EditText
+            android:id="@+id/apiKeyInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="gsk_..."
+            android:inputType="textPassword"
+            android:autofillHints="password" />
+
+        <Button
+            android:id="@+id/saveApiKey"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="APIキーを保存" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="16dp"
+            android:background="#666" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="2. 権限設定（初回のみ）"
+            android:textStyle="bold"
+            android:paddingBottom="4dp" />
+
+        <Button
+            android:id="@+id/btnOverlayPerm"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="他のアプリの上に表示（オーバーレイ）" />
+
+        <Button
+            android:id="@+id/btnAccessibilityPerm"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ユーザー補助を有効化" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="16dp"
+            android:background="#666" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="3. 起動 / 停止"
+            android:textStyle="bold"
+            android:paddingBottom="4dp" />
+
+        <Button
+            android:id="@+id/btnStartOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="フロートマイクを起動" />
+
+        <Button
+            android:id="@+id/btnStopOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="停止" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:textSize="12sp"
+            android:text="使い方: マイクアイコンをタップで録音開始、もう一度タップで停止。認識したテキストが選択中の入力欄に貼り付けられます。" />
+    </LinearLayout>
+</ScrollView>
