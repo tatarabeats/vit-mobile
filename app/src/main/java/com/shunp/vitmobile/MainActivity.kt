@@ -50,6 +50,15 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "APIキーを入力・保存してください", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
+            if (!isAccessibilityEnabled()) {
+                Toast.makeText(
+                    this,
+                    "ユーザー補助で『VIT Mobile テキスト挿入』をONにしてください。これをONにしないと入力欄に自動挿入されません。",
+                    Toast.LENGTH_LONG
+                ).show()
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                return@setOnClickListener
+            }
             val intent = Intent(this, OverlayService::class.java)
             startForegroundService(intent)
             Toast.makeText(this, "フロートマイクを起動しました", Toast.LENGTH_SHORT).show()
@@ -60,5 +69,13 @@ class MainActivity : AppCompatActivity() {
             stopService(Intent(this, OverlayService::class.java))
             Toast.makeText(this, "停止しました", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun isAccessibilityEnabled(): Boolean {
+        val enabled = Settings.Secure.getString(
+            contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        val myId = "$packageName/${InputAccessibilityService::class.java.name}"
+        return enabled.split(':').any { it.equals(myId, ignoreCase = true) }
     }
 }

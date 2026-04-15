@@ -68,7 +68,7 @@ class OverlayService : Service() {
         view = ImageView(this).apply {
             setImageResource(R.drawable.ic_mic)
             setBackgroundResource(R.drawable.mic_button_background)
-            val pad = (resources.displayMetrics.density * 14).toInt()
+            val pad = (resources.displayMetrics.density * 10).toInt()
             setPadding(pad, pad, pad, pad)
         }
 
