@@ -12,6 +12,6 @@ local.properties
 /app/release
 *.apk
 *.aab
-*.keystore
 *.jks
+# debug.keystore is intentionally tracked for consistent signing
 /.kotlin/
