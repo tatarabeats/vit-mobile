@@ -17,37 +17,21 @@ import android.os.IBinder
 import android.os.Looper
 import android.view.Gravity
 import android.view.MotionEvent
-import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
-import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlin.math.abs
 
 class OverlayService : Service() {
     private lateinit var wm: WindowManager
-    private lateinit var rootView: LinearLayout
-    private lateinit var timerView: TextView
     private lateinit var micButton: ImageView
     private lateinit var params: WindowManager.LayoutParams
     private var recorder: VoiceRecorder? = null
     private var isRecording = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var timerStartMs = 0L
-    private val timerRunnable = object : Runnable {
-        override fun run() {
-            if (isRecording) {
-                val sec = (System.currentTimeMillis() - timerStartMs) / 1000
-                timerView.text = String.format("%d:%02d", sec / 60, sec % 60)
-                mainHandler.postDelayed(this, 500)
-            }
-        }
-    }
 
     private val gold = Color.parseColor("#FFF0C040")
     private val navy = Color.parseColor("#FF0A0E1A")
@@ -88,49 +72,27 @@ class OverlayService : Service() {
 
     private fun setupOverlay() {
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-
         val density = resources.displayMetrics.density
 
-        rootView = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-        }
-
-        // 録音時間表示（録音中だけ表示）
-        timerView = TextView(this).apply {
-            text = ""
-            setTextColor(gold)
-            setShadowLayer(4f, 0f, 0f, navy)
-            textSize = 13f
-            visibility = View.GONE
-            setBackgroundColor(Color.parseColor("#CC000000"))
-            setPadding((density * 6).toInt(), (density * 2).toInt(), (density * 6).toInt(), (density * 2).toInt())
-        }
-        val timerParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = (density * 4).toInt() }
-
-        // マイクボタン
+        // マイクボタン単体（時間表示なし、形が変わらないようサイズ固定）
         micButton = ImageView(this).apply {
             setImageResource(R.drawable.ic_mic)
             setBackgroundResource(R.drawable.mic_button_background)
             imageTintList = ColorStateList.valueOf(gold)
             val pad = (density * 10).toInt()
             setPadding(pad, pad, pad, pad)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
         }
-
-        rootView.addView(timerView, timerParams)
-        rootView.addView(micButton)
 
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         else
             @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
 
+        // サイズを固定（円形を維持）— 56dp四方
+        val sizePx = (density * 56).toInt()
         params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            sizePx, sizePx,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
@@ -140,12 +102,11 @@ class OverlayService : Service() {
             y = 400
         }
 
-        attachTouchListener(density)
-
-        wm.addView(rootView, params)
+        attachTouchListener()
+        wm.addView(micButton, params)
     }
 
-    private fun attachTouchListener(density: Float) {
+    private fun attachTouchListener() {
         var initialX = 0
         var initialY = 0
         var touchStartX = 0f
@@ -174,7 +135,6 @@ class OverlayService : Service() {
                     dragged = false
                     longPressed = false
                     if (isRecording) {
-                        // 録音中だけ長押しでキャンセル受付
                         mainHandler.postDelayed(longPressRunnable, 600)
                     }
                     true
@@ -189,7 +149,7 @@ class OverlayService : Service() {
                     if (dragged) {
                         params.x = initialX + dx
                         params.y = initialY + dy
-                        try { wm.updateViewLayout(rootView, params) } catch (_: Exception) {}
+                        try { wm.updateViewLayout(micButton, params) } catch (_: Exception) {}
                     }
                     true
                 }
@@ -204,11 +164,7 @@ class OverlayService : Service() {
     }
 
     private fun toggleRecord() {
-        if (isRecording) {
-            stopRecording()
-        } else {
-            startRecording()
-        }
+        if (isRecording) stopRecording() else startRecording()
     }
 
     private fun startRecording() {
@@ -216,10 +172,6 @@ class OverlayService : Service() {
             isRecording = true
             micButton.setBackgroundResource(R.drawable.mic_button_recording)
             micButton.imageTintList = ColorStateList.valueOf(navy)
-            timerStartMs = System.currentTimeMillis()
-            timerView.text = "0:00"
-            timerView.visibility = View.VISIBLE
-            mainHandler.post(timerRunnable)
         }
     }
 
@@ -227,8 +179,6 @@ class OverlayService : Service() {
         isRecording = false
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
-        timerView.visibility = View.GONE
-        mainHandler.removeCallbacks(timerRunnable)
         recorder?.stopAndTranscribe { text ->
             if (!text.isNullOrBlank()) copyAndPaste(text)
         }
@@ -238,8 +188,6 @@ class OverlayService : Service() {
         isRecording = false
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
-        timerView.visibility = View.GONE
-        mainHandler.removeCallbacks(timerRunnable)
         recorder?.cancel()
     }
 
@@ -255,7 +203,7 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         mainHandler.removeCallbacksAndMessages(null)
-        try { wm.removeView(rootView) } catch (_: Exception) {}
+        try { wm.removeView(micButton) } catch (_: Exception) {}
         recorder?.release()
     }
 }

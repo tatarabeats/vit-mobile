@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#FF0A0E1A">
 
     <LinearLayout
         android:orientation="vertical"
@@ -13,8 +14,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/app_name"
-            android:textSize="28sp"
+            android:textSize="32sp"
             android:textStyle="bold"
+            android:textColor="#FFF0C040"
             android:paddingBottom="24dp" />
 
         <TextView
@@ -22,8 +24,10 @@
             android:layout_height="wrap_content"
             android:text="1. Groq APIキー（音声認識）"
             android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
             android:paddingTop="8dp"
-            android:paddingBottom="4dp" />
+            android:paddingBottom="6dp" />
 
         <EditText
             android:id="@+id/apiKeyInput"
@@ -31,22 +35,30 @@
             android:layout_height="wrap_content"
             android:hint="gsk_..."
             android:inputType="textPassword"
+            android:textColor="#FFFFFFFF"
+            android:textColorHint="#80FFFFFF"
+            android:background="#FF1A2440"
+            android:padding="14dp"
             android:autofillHints="password" />
 
         <Button
             android:id="@+id/saveApiKey"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="保存" />
+            android:layout_marginTop="10dp"
+            android:text="保存"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="2. Anthropic APIキー（句読点・誤字補正、任意）"
             android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
             android:paddingTop="20dp"
-            android:paddingBottom="4dp" />
+            android:paddingBottom="6dp" />
 
         <EditText
             android:id="@+id/anthropicKeyInput"
@@ -54,79 +66,105 @@
             android:layout_height="wrap_content"
             android:hint="sk-ant-..."
             android:inputType="textPassword"
+            android:textColor="#FFFFFFFF"
+            android:textColorHint="#80FFFFFF"
+            android:background="#FF1A2440"
+            android:padding="14dp"
             android:autofillHints="password" />
 
         <Button
             android:id="@+id/saveAnthropicKey"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="保存" />
+            android:layout_marginTop="10dp"
+            android:text="保存"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
 
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/llmFixSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="LLM補正を有効化（Anthropic APIキー必須）" />
+            android:layout_marginTop="12dp"
+            android:text="LLM補正を有効化（Anthropic APIキー必須）"
+            android:textColor="#FFFFFFFF"
+            android:textSize="15sp" />
 
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginTop="20dp"
             android:layout_marginBottom="16dp"
-            android:background="#666" />
+            android:background="#FFF0C040" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="3. 権限設定（初回のみ）"
             android:textStyle="bold"
-            android:paddingBottom="4dp" />
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
+            android:paddingBottom="6dp" />
 
         <Button
             android:id="@+id/btnOverlayPerm"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="他のアプリの上に表示（オーバーレイ）" />
+            android:layout_marginTop="6dp"
+            android:text="他のアプリの上に表示"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
 
         <Button
             android:id="@+id/btnAccessibilityPerm"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ユーザー補助を有効化" />
+            android:layout_marginTop="6dp"
+            android:text="ユーザー補助を有効化"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
 
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_marginTop="20dp"
             android:layout_marginBottom="16dp"
-            android:background="#666" />
+            android:background="#FFF0C040" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="4. 起動 / 停止"
             android:textStyle="bold"
-            android:paddingBottom="4dp" />
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
+            android:paddingBottom="6dp" />
 
         <Button
             android:id="@+id/btnStartOverlay"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="フロートマイクを起動" />
+            android:layout_marginTop="6dp"
+            android:text="フロートマイクを起動"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
 
         <Button
             android:id="@+id/btnStopOverlay"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="停止" />
+            android:layout_marginTop="6dp"
+            android:text="停止"
+            android:textColor="#FFFFFFFF"
+            android:backgroundTint="#FF1A2440" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:textSize="12sp"
-            android:text="使い方:\n・タップで録音開始/停止\n・録音中は録音時間が上に表示\n・録音中に長押しでキャンセル\n・ドラッグで位置移動" />
+            android:textSize="13sp"
+            android:textColor="#CCFFFFFF"
+            android:lineSpacingExtra="4dp"
+            android:text="使い方:\n・タップで録音開始/停止\n・録音中に長押しでキャンセル\n・ドラッグで位置移動" />
     </LinearLayout>
 </ScrollView>
