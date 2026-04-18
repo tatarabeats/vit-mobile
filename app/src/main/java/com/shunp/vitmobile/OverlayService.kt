@@ -194,8 +194,10 @@ class OverlayService : Service() {
     private fun copyAndPaste(text: String) {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("VIT", text))
+        // Intent Extra でテキストも直接渡す（Accessibility ServiceはClipboardが読めない制限対策）
         val intent = Intent(InputAccessibilityService.ACTION_PASTE).apply {
             setPackage(packageName)
+            putExtra(InputAccessibilityService.EXTRA_TEXT, text)
         }
         sendBroadcast(intent)
     }
