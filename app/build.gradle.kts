@@ -10,9 +10,11 @@ android {
     defaultConfig {
         applicationId = "com.shunp.vitmobile"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 3
-        versionName = "0.1.2"
+        // targetSdk = 31 (Android 12) で Restricted Settings ガードを回避
+        // Android 13+ のサイドロードアプリの Accessibility 有効化制限を無効化する
+        targetSdk = 31
+        versionCode = 4
+        versionName = "0.1.3"
     }
 
     signingConfigs {
