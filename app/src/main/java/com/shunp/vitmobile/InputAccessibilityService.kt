@@ -39,11 +39,11 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     private fun pasteOrSetText() {
-        val node = findFocusedEditable() ?: findEditableInTree() ?: return
-        // まず ACTION_PASTE を試す
-        val pasted = node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-        if (pasted) return
-        // ACTION_PASTE 失敗 → ACTION_SET_TEXT でフォールバック
+        // フォーカス中のノードを優先。無ければツリー全探索。
+        val node = findFocusedNode() ?: findInputNodeInTree() ?: return
+        // ACTION_PASTE を無条件で試す（isEditable に依存しない）
+        if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) return
+        // フォールバック: ACTION_SET_TEXT で既存テキスト + クリップボードを結合
         val clipText = getClipboardText() ?: return
         val existing = node.text?.toString() ?: ""
         val combined = if (existing.isEmpty()) clipText else "$existing $clipText"
@@ -56,24 +56,47 @@ class InputAccessibilityService : AccessibilityService() {
         node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
     }
 
-    private fun findFocusedEditable(): AccessibilityNodeInfo? {
+    private fun findFocusedNode(): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: return null
         return root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
             ?: root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
     }
 
-    /** rootInActiveWindow を再帰探索して editable なノードを見つける */
-    private fun findEditableInTree(): AccessibilityNodeInfo? {
-        val root = rootInActiveWindow ?: return null
-        return searchEditable(root)
+    /**
+     * rootInActiveWindow + 他ウィンドウを再帰探索し、
+     * 入力候補ノード（editable もしくは EditText 系 class / TextField / WebView 内 input）を見つける。
+     */
+    private fun findInputNodeInTree(): AccessibilityNodeInfo? {
+        // rootInActiveWindow 優先
+        rootInActiveWindow?.let { searchInput(it)?.let { n -> return n } }
+        // 他ウィンドウも念のため見る（IME ウィンドウは除外）
+        val windowList = try { windows } catch (_: Exception) { null } ?: return null
+        for (w in windowList) {
+            if (w.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+            val root = w.root ?: continue
+            searchInput(root)?.let { return it }
+        }
+        return null
     }
 
-    private fun searchEditable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isEditable && node.isFocused) return node
+    private fun searchInput(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val cn = node.className?.toString() ?: ""
+        // 優先順1: focused + editable
+        if (node.isFocused && node.isEditable) return node
+        // 優先順2: focused + EditText / TextField 系（isEditable が false を返す Compose 対策）
+        if (node.isFocused && (
+            cn.contains("EditText", ignoreCase = true)
+            || cn.contains("TextField", ignoreCase = true)
+            || cn.contains("TextInput", ignoreCase = true)
+        )) return node
+        // 優先順3: editable
         if (node.isEditable) return node
+        // 優先順4: EditText / TextField クラス名
+        if (cn.contains("EditText") || cn.contains("TextField") || cn.contains("TextInput")) return node
+        // 再帰
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            val found = searchEditable(child)
+            val found = searchInput(child)
             if (found != null) return found
         }
         return null
