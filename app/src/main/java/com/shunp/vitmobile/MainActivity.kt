@@ -20,7 +20,19 @@ class MainActivity : AppCompatActivity() {
         b.saveApiKey.setOnClickListener {
             val key = b.apiKeyInput.text.toString().trim()
             Prefs.setGroqKey(this, key)
-            Toast.makeText(this, "APIキーを保存しました", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Groq APIキーを保存しました", Toast.LENGTH_SHORT).show()
+        }
+
+        b.anthropicKeyInput.setText(Prefs.getAnthropicKey(this) ?: "")
+        b.saveAnthropicKey.setOnClickListener {
+            val key = b.anthropicKeyInput.text.toString().trim()
+            Prefs.setAnthropicKey(this, key)
+            Toast.makeText(this, "Anthropic APIキーを保存しました", Toast.LENGTH_SHORT).show()
+        }
+
+        b.llmFixSwitch.isChecked = Prefs.isLlmFixEnabled(this)
+        b.llmFixSwitch.setOnCheckedChangeListener { _, checked ->
+            Prefs.setLlmFixEnabled(this, checked)
         }
 
         b.btnOverlayPerm.setOnClickListener {
@@ -47,13 +59,13 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             if (Prefs.getGroqKey(this).isNullOrBlank()) {
-                Toast.makeText(this, "APIキーを入力・保存してください", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Groq APIキーを入力・保存してください", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
             if (!isAccessibilityEnabled()) {
                 Toast.makeText(
                     this,
-                    "ユーザー補助で『VIT Mobile テキスト挿入』をONにしてください。これをONにしないと入力欄に自動挿入されません。",
+                    "ユーザー補助で『VIT Mobile テキスト挿入』をONにしてください",
                     Toast.LENGTH_LONG
                 ).show()
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))

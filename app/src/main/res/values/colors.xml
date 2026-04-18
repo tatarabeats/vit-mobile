@@ -1,9 +1,20 @@
 <resources>
-    <color name="purple_500">#6200EE</color>
-    <color name="purple_700">#3700B3</color>
-    <color name="teal_200">#03DAC5</color>
+    <!-- Brand: 紺 + 金 (PC版アイコンと統一) -->
+    <color name="navy">#FF0A0E1A</color>
+    <color name="navy_lighter">#FF1A2440</color>
+    <color name="gold">#FFF0C040</color>
+    <color name="gold_bright">#FFFFE066</color>
+
+    <!-- Backward compat -->
+    <color name="purple_500">#FF0A0E1A</color>
+    <color name="purple_700">#FF1A2440</color>
+    <color name="teal_200">#FFF0C040</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="mic_bg">#CC6200EE</color>
-    <color name="mic_bg_recording">#CCE53935</color>
+
+    <!-- Float mic button -->
+    <color name="mic_bg">#EE0A0E1A</color>
+    <color name="mic_bg_recording">#EEF0C040</color>
+    <color name="mic_border">#FFF0C040</color>
+    <color name="mic_border_recording">#FF0A0E1A</color>
 </resources>

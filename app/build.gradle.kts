@@ -13,8 +13,8 @@ android {
         // targetSdk = 31 (Android 12) で Restricted Settings ガードを回避
         // Android 13+ のサイドロードアプリの Accessibility 有効化制限を無効化する
         targetSdk = 31
-        versionCode = 5
-        versionName = "0.1.4"
+        versionCode = 6
+        versionName = "0.1.5"
     }
 
     signingConfigs {
