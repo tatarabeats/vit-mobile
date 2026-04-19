@@ -139,7 +139,7 @@
             android:layout_height="wrap_content"
             android:minHeight="100dp"
             android:gravity="top|start"
-            android:hint="例:&#10;住所|岡山県岡山市北区〇〇1-2-3&#10;電話|090-1234-5678&#10;メール|shunp@example.com"
+            android:hint="例:&#10;住所|和歌山県〇〇市〇〇町1-2-3&#10;電話|090-1234-5678&#10;メール|shunp@example.com"
             android:inputType="textMultiLine"
             android:textColor="#FFFFFFFF"
             android:textColorHint="#80FFFFFF"
