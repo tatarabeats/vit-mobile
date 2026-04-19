@@ -76,9 +76,14 @@ class VoiceRecorder(private val ctx: Context) {
         if (file == null) { onResult(null); return }
         scope.launch {
             var text = transcribe(file)
-            if (!text.isNullOrBlank() && Prefs.isLlmFixEnabled(ctx) && !Prefs.getAnthropicKey(ctx).isNullOrBlank()) {
-                val fixed = llmFix(text)
-                if (!fixed.isNullOrBlank()) text = fixed
+            if (!text.isNullOrBlank()) {
+                // 1. スニペット置換（「住所」→岡山の住所等）を先に適用
+                text = Prefs.applySnippets(ctx, text)
+                // 2. スニペット置換が発生しなかった場合のみ LLM 補正を走らせる
+                if (Prefs.isLlmFixEnabled(ctx) && !Prefs.getAnthropicKey(ctx).isNullOrBlank()) {
+                    val fixed = llmFix(text)
+                    if (!fixed.isNullOrBlank()) text = fixed
+                }
             }
             withContext(Dispatchers.Main) { onResult(text) }
             try { file.delete() } catch (_: Exception) {}

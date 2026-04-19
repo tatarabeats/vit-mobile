@@ -41,6 +41,12 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "辞書を保存しました", Toast.LENGTH_SHORT).show()
         }
 
+        b.snippetsInput.setText(Prefs.getSnippets(this))
+        b.saveSnippets.setOnClickListener {
+            Prefs.setSnippets(this, b.snippetsInput.text.toString())
+            Toast.makeText(this, "ショートカットを保存しました", Toast.LENGTH_SHORT).show()
+        }
+
         b.btnOverlayPerm.setOnClickListener {
             startActivity(
                 Intent(

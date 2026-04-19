@@ -123,6 +123,39 @@
             android:textColor="#FF0A0E1A"
             android:backgroundTint="#FFF0C040" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ショートカット（話した言葉 → 入力される文字列）"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
+            android:paddingTop="20dp"
+            android:paddingBottom="6dp" />
+
+        <EditText
+            android:id="@+id/snippetsInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="100dp"
+            android:gravity="top|start"
+            android:hint="例:&#10;住所|岡山県岡山市北区〇〇1-2-3&#10;電話|090-1234-5678&#10;メール|shunp@example.com"
+            android:inputType="textMultiLine"
+            android:textColor="#FFFFFFFF"
+            android:textColorHint="#80FFFFFF"
+            android:background="#FF1A2440"
+            android:padding="14dp"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/saveSnippets"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="ショートカットを保存"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

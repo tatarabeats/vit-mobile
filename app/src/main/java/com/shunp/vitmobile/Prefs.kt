@@ -8,6 +8,7 @@ object Prefs {
     private const val KEY_ANTHROPIC = "anthropic_api_key"
     private const val KEY_LLM_FIX = "llm_fix_enabled"
     private const val KEY_DICT = "dictionary"
+    private const val KEY_SNIPPETS = "snippets"
 
     fun getGroqKey(ctx: Context): String? =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -43,5 +44,36 @@ object Prefs {
     fun setDictionary(ctx: Context, text: String) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_DICT, text).apply()
+    }
+
+    fun getSnippets(ctx: Context): String =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_SNIPPETS, "") ?: ""
+
+    fun setSnippets(ctx: Context, text: String) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_SNIPPETS, text).apply()
+    }
+
+    /**
+     * 認識結果に対してスニペット（ショートカット）を適用。
+     * 形式: "トリガー|置換テキスト" を1行に1つ。
+     * 完全一致（前後の句読点は無視）の場合のみ置換。
+     */
+    fun applySnippets(ctx: Context, recognized: String): String {
+        val snippets = getSnippets(ctx)
+        if (snippets.isBlank()) return recognized
+        val trimmed = recognized.trim().trimEnd('。', '、', '.', ',', '!', '?', '！', '？', ' ', '　')
+        for (line in snippets.lines()) {
+            val parts = line.split("|", limit = 2)
+            if (parts.size != 2) continue
+            val key = parts[0].trim()
+            val value = parts[1].trim()
+            if (key.isEmpty()) continue
+            if (trimmed == key || trimmed == "${key}。" || trimmed == key.trimEnd('。')) {
+                return value
+            }
+        }
+        return recognized
     }
 }
