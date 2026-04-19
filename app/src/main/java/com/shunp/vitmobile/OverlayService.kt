@@ -15,8 +15,10 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.ImageView
@@ -27,9 +29,16 @@ import kotlin.math.abs
 class OverlayService : Service() {
     private lateinit var wm: WindowManager
     private lateinit var micButton: ImageView
-    private lateinit var params: WindowManager.LayoutParams
+    private lateinit var collapseTab: View
+    private lateinit var micParams: WindowManager.LayoutParams
+    private lateinit var tabParams: WindowManager.LayoutParams
     private var recorder: VoiceRecorder? = null
     private var isRecording = false
+    private var isCollapsed = false
+    private var density = 1f
+    private var screenWidth = 0
+    private var screenHeight = 0
+    private var lastMicY = 0  // 収納時の高さを保持
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -72,9 +81,15 @@ class OverlayService : Service() {
 
     private fun setupOverlay() {
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val density = resources.displayMetrics.density
+        density = resources.displayMetrics.density
 
-        // マイクボタン単体（時間表示なし、形が変わらないようサイズ固定）
+        val dm = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getMetrics(dm)
+        screenWidth = dm.widthPixels
+        screenHeight = dm.heightPixels
+
+        // マイクボタン
         micButton = ImageView(this).apply {
             setImageResource(R.drawable.ic_mic)
             setBackgroundResource(R.drawable.mic_button_background)
@@ -84,26 +99,52 @@ class OverlayService : Service() {
             scaleType = ImageView.ScaleType.CENTER_INSIDE
         }
 
+        // 収納タブ
+        collapseTab = View(this).apply {
+            setBackgroundResource(R.drawable.collapse_tab_bg)
+            setOnClickListener { expand() }
+        }
+
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         else
             @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
 
-        // サイズを固定（円形を維持）— 56dp四方
         val sizePx = (density * 56).toInt()
-        params = WindowManager.LayoutParams(
+        // 起動時は画面右下に配置
+        val initialX = screenWidth - sizePx - (density * 16).toInt()
+        val initialY = screenHeight - sizePx - (density * 200).toInt()
+        lastMicY = initialY
+
+        micParams = WindowManager.LayoutParams(
             sizePx, sizePx,
             overlayType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 24
-            y = 400
+            x = initialX
+            y = initialY
+        }
+
+        // 収納タブ: 画面右端に張り付く（半分はみ出る）
+        val tabW = (density * 14).toInt()
+        val tabH = (density * 70).toInt()
+        tabParams = WindowManager.LayoutParams(
+            tabW, tabH,
+            overlayType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = screenWidth - tabW
+            y = initialY
         }
 
         attachTouchListener()
-        wm.addView(micButton, params)
+        wm.addView(micButton, micParams)
     }
 
     private fun attachTouchListener() {
@@ -114,6 +155,7 @@ class OverlayService : Service() {
         var dragged = false
         var longPressed = false
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        val edgeSnapThresholdPx = (density * 30).toInt()  // 画面端30dp以内なら収納
 
         val longPressRunnable = Runnable {
             if (!dragged) {
@@ -128,8 +170,8 @@ class OverlayService : Service() {
         micButton.setOnTouchListener { _, ev ->
             when (ev.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    initialX = params.x
-                    initialY = params.y
+                    initialX = micParams.x
+                    initialY = micParams.y
                     touchStartX = ev.rawX
                     touchStartY = ev.rawY
                     dragged = false
@@ -147,20 +189,52 @@ class OverlayService : Service() {
                         mainHandler.removeCallbacks(longPressRunnable)
                     }
                     if (dragged) {
-                        params.x = initialX + dx
-                        params.y = initialY + dy
-                        try { wm.updateViewLayout(micButton, params) } catch (_: Exception) {}
+                        micParams.x = initialX + dx
+                        micParams.y = initialY + dy
+                        try { wm.updateViewLayout(micButton, micParams) } catch (_: Exception) {}
                     }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     mainHandler.removeCallbacks(longPressRunnable)
-                    if (!dragged && !longPressed) toggleRecord()
+                    if (!dragged && !longPressed) {
+                        toggleRecord()
+                    } else if (dragged) {
+                        // 画面端まで運ばれたら収納モード
+                        val sizePx = (density * 56).toInt()
+                        val rightEdge = micParams.x + sizePx
+                        if (rightEdge >= screenWidth - edgeSnapThresholdPx) {
+                            collapse()
+                        }
+                    }
                     true
                 }
                 else -> false
             }
         }
+    }
+
+    private fun collapse() {
+        if (isCollapsed) return
+        if (isRecording) cancelRecording()
+        lastMicY = micParams.y.coerceIn(
+            (density * 40).toInt(),
+            screenHeight - (density * 200).toInt()
+        )
+        try { wm.removeView(micButton) } catch (_: Exception) {}
+        tabParams.y = lastMicY + (density * 6).toInt()
+        try { wm.addView(collapseTab, tabParams) } catch (_: Exception) {}
+        isCollapsed = true
+    }
+
+    private fun expand() {
+        if (!isCollapsed) return
+        try { wm.removeView(collapseTab) } catch (_: Exception) {}
+        val sizePx = (density * 56).toInt()
+        micParams.x = screenWidth - sizePx - (density * 16).toInt()
+        micParams.y = lastMicY
+        try { wm.addView(micButton, micParams) } catch (_: Exception) {}
+        isCollapsed = false
     }
 
     private fun toggleRecord() {
@@ -194,7 +268,6 @@ class OverlayService : Service() {
     private fun copyAndPaste(text: String) {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("VIT", text))
-        // Intent Extra でテキストも直接渡す（Accessibility ServiceはClipboardが読めない制限対策）
         val intent = Intent(InputAccessibilityService.ACTION_PASTE).apply {
             setPackage(packageName)
             putExtra(InputAccessibilityService.EXTRA_TEXT, text)
@@ -205,7 +278,7 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         mainHandler.removeCallbacksAndMessages(null)
-        try { wm.removeView(micButton) } catch (_: Exception) {}
+        try { if (!isCollapsed) wm.removeView(micButton) else wm.removeView(collapseTab) } catch (_: Exception) {}
         recorder?.release()
     }
 }
