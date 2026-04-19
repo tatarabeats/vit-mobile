@@ -155,7 +155,8 @@ class OverlayService : Service() {
         var dragged = false
         var longPressed = false
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
-        val edgeSnapThresholdPx = (density * 30).toInt()  // 画面端30dp以内なら収納
+        // 画面外に4dp以上はみ出した時だけ収納（画面端スレスレでも維持）
+        val edgeOverflowPx = (density * 4).toInt()
 
         val longPressRunnable = Runnable {
             if (!dragged) {
@@ -200,10 +201,10 @@ class OverlayService : Service() {
                     if (!dragged && !longPressed) {
                         toggleRecord()
                     } else if (dragged) {
-                        // 画面端まで運ばれたら収納モード
+                        // アイコンが画面外にはみ出した時だけ収納
                         val sizePx = (density * 56).toInt()
                         val rightEdge = micParams.x + sizePx
-                        if (rightEdge >= screenWidth - edgeSnapThresholdPx) {
+                        if (rightEdge > screenWidth + edgeOverflowPx) {
                             collapse()
                         }
                     }
