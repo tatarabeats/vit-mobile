@@ -10,9 +10,6 @@ object Prefs {
     private const val KEY_DICT = "dictionary"
     private const val KEY_SNIPPETS = "snippets"
 
-    // 初回起動時のデフォルトスニペット（駿平の和歌山シェアハウス住所）
-    private const val DEFAULT_SNIPPETS = "住所|〒646-1402 和歌山県田辺市中辺路町近露1985"
-
     fun getGroqKey(ctx: Context): String? =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_GROQ, null)
@@ -51,7 +48,7 @@ object Prefs {
 
     fun getSnippets(ctx: Context): String =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_SNIPPETS, DEFAULT_SNIPPETS) ?: DEFAULT_SNIPPETS
+            .getString(KEY_SNIPPETS, "") ?: ""
 
     fun setSnippets(ctx: Context, text: String) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
