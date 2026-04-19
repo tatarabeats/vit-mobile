@@ -90,6 +90,39 @@
             android:textColor="#FFFFFFFF"
             android:textSize="15sp" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="辞書（住所・固有名詞、改行区切り）"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
+            android:paddingTop="20dp"
+            android:paddingBottom="6dp" />
+
+        <EditText
+            android:id="@+id/dictionaryInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="120dp"
+            android:gravity="top|start"
+            android:hint="例:&#10;和歌山県有田市初島町&#10;和歌山県東牟婁郡那智勝浦町&#10;白浜町、上富田町、新宮市..."
+            android:inputType="textMultiLine"
+            android:textColor="#FFFFFFFF"
+            android:textColorHint="#80FFFFFF"
+            android:background="#FF1A2440"
+            android:padding="14dp"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/saveDictionary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="辞書を保存"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

@@ -89,7 +89,8 @@ class VoiceRecorder(private val ctx: Context) {
         val key = Prefs.getGroqKey(ctx)
         if (key.isNullOrBlank()) { toast("Groq APIキー未設定"); return@withContext null }
 
-        val body = MultipartBody.Builder()
+        val dict = Prefs.getDictionary(ctx).trim()
+        val builder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart(
                 "file", file.name,
@@ -98,7 +99,12 @@ class VoiceRecorder(private val ctx: Context) {
             .addFormDataPart("model", "whisper-large-v3-turbo")
             .addFormDataPart("language", "ja")
             .addFormDataPart("response_format", "json")
-            .build()
+        if (dict.isNotEmpty()) {
+            // Whisper の prompt は最大 224 トークン → 安全に 800 文字でクランプ
+            val prompt = if (dict.length > 800) dict.substring(0, 800) else dict
+            builder.addFormDataPart("prompt", prompt)
+        }
+        val body = builder.build()
 
         val req = Request.Builder()
             .url("https://api.groq.com/openai/v1/audio/transcriptions")

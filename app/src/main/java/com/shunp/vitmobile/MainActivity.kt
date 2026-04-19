@@ -35,6 +35,12 @@ class MainActivity : AppCompatActivity() {
             Prefs.setLlmFixEnabled(this, checked)
         }
 
+        b.dictionaryInput.setText(Prefs.getDictionary(this))
+        b.saveDictionary.setOnClickListener {
+            Prefs.setDictionary(this, b.dictionaryInput.text.toString())
+            Toast.makeText(this, "辞書を保存しました", Toast.LENGTH_SHORT).show()
+        }
+
         b.btnOverlayPerm.setOnClickListener {
             startActivity(
                 Intent(
