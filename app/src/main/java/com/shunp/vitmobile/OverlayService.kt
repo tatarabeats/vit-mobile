@@ -9,6 +9,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
@@ -274,6 +275,44 @@ class OverlayService : Service() {
             putExtra(InputAccessibilityService.EXTRA_TEXT, text)
         }
         sendBroadcast(intent)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // 画面回転時に新しい画面サイズを取得して、バーを再配置する
+        val dm = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getMetrics(dm)
+        val newWidth = dm.widthPixels
+        val newHeight = dm.heightPixels
+
+        val sizePx = (density * 56).toInt()
+        val marginX = (density * 16).toInt()
+        val topMargin = (density * 40).toInt()
+        val bottomMargin = (density * 200).toInt()
+
+        if (isCollapsed) {
+            // 収納タブは常に画面右端に張り付く。y は新画面内にclamp
+            val tabW = (density * 14).toInt()
+            tabParams.x = newWidth - tabW
+            tabParams.y = tabParams.y.coerceIn(topMargin, newHeight - bottomMargin)
+            try { wm.updateViewLayout(collapseTab, tabParams) } catch (_: Exception) {}
+            lastMicY = tabParams.y - (density * 6).toInt()
+        } else {
+            // 回転前のx座標の画面内比率を保って、どちらの端寄りかで吸着/clamp を判定
+            val oldCenterX = micParams.x + sizePx / 2f
+            val oldRatio = if (screenWidth > 0) oldCenterX / screenWidth else 0.5f
+            micParams.x = when {
+                oldRatio >= 0.7f -> newWidth - sizePx - marginX   // 右寄り → 右端吸着
+                oldRatio <= 0.3f -> marginX                        // 左寄り → 左端吸着
+                else -> (newWidth / 2f - sizePx / 2f).toInt()      // 中央寄り → 中央配置
+            }
+            micParams.y = micParams.y.coerceIn(topMargin, newHeight - sizePx - topMargin)
+            try { wm.updateViewLayout(micButton, micParams) } catch (_: Exception) {}
+        }
+
+        screenWidth = newWidth
+        screenHeight = newHeight
     }
 
     override fun onDestroy() {
