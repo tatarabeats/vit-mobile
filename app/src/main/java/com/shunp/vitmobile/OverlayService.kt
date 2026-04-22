@@ -100,10 +100,9 @@ class OverlayService : Service() {
             scaleType = ImageView.ScaleType.CENTER_INSIDE
         }
 
-        // 収納タブ
+        // 収納タブ（タップで展開・上下ドラッグで位置調整、タッチリスナーは attachTabTouchListener で登録）
         collapseTab = View(this).apply {
             setBackgroundResource(R.drawable.collapse_tab_bg)
-            setOnClickListener { expand() }
         }
 
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
@@ -145,7 +144,42 @@ class OverlayService : Service() {
         }
 
         attachTouchListener()
+        attachTabTouchListener()
         wm.addView(micButton, micParams)
+    }
+
+    private fun attachTabTouchListener() {
+        var initialY = 0
+        var touchStartY = 0f
+        var dragged = false
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        val tabH = (density * 70).toInt()
+        val edgeMargin = (density * 20).toInt()
+
+        collapseTab.setOnTouchListener { _, ev ->
+            when (ev.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    initialY = tabParams.y
+                    touchStartY = ev.rawY
+                    dragged = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dy = (ev.rawY - touchStartY).toInt()
+                    if (abs(dy) > touchSlop) {
+                        dragged = true
+                        tabParams.y = (initialY + dy).coerceIn(edgeMargin, screenHeight - tabH - edgeMargin)
+                        try { wm.updateViewLayout(collapseTab, tabParams) } catch (_: Exception) {}
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (!dragged) expand() else lastMicY = tabParams.y
+                    true
+                }
+                else -> false
+            }
+        }
     }
 
     private fun attachTouchListener() {
@@ -219,12 +253,12 @@ class OverlayService : Service() {
     private fun collapse() {
         if (isCollapsed) return
         if (isRecording) cancelRecording()
-        lastMicY = micParams.y.coerceIn(
-            (density * 40).toInt(),
-            screenHeight - (density * 200).toInt()
-        )
+        val tabH = (density * 70).toInt()
+        val edgeMargin = (density * 20).toInt()
+        // 指を離した位置でバーが出るように、y の clamp 範囲を緩めて micParams.y をそのまま使う
+        lastMicY = micParams.y.coerceIn(edgeMargin, screenHeight - tabH - edgeMargin)
         try { wm.removeView(micButton) } catch (_: Exception) {}
-        tabParams.y = lastMicY + (density * 6).toInt()
+        tabParams.y = lastMicY
         try { wm.addView(collapseTab, tabParams) } catch (_: Exception) {}
         isCollapsed = true
     }
@@ -288,16 +322,17 @@ class OverlayService : Service() {
 
         val sizePx = (density * 56).toInt()
         val marginX = (density * 16).toInt()
-        val topMargin = (density * 40).toInt()
-        val bottomMargin = (density * 200).toInt()
+        val edgeMargin = (density * 20).toInt()
+        val tabH = (density * 70).toInt()
 
         if (isCollapsed) {
-            // 収納タブは常に画面右端に張り付く。y は新画面内にclamp
+            // 収納タブは常に画面右端に張り付く。y は旧画面高さに対する比率で新画面高さに再配置
             val tabW = (density * 14).toInt()
+            val yRatio = if (screenHeight > 0) tabParams.y.toFloat() / screenHeight else 0.5f
             tabParams.x = newWidth - tabW
-            tabParams.y = tabParams.y.coerceIn(topMargin, newHeight - bottomMargin)
+            tabParams.y = (newHeight * yRatio).toInt().coerceIn(edgeMargin, newHeight - tabH - edgeMargin)
             try { wm.updateViewLayout(collapseTab, tabParams) } catch (_: Exception) {}
-            lastMicY = tabParams.y - (density * 6).toInt()
+            lastMicY = tabParams.y
         } else {
             // 回転前のx座標の画面内比率を保って、どちらの端寄りかで吸着/clamp を判定
             val oldCenterX = micParams.x + sizePx / 2f
@@ -307,7 +342,9 @@ class OverlayService : Service() {
                 oldRatio <= 0.3f -> marginX                        // 左寄り → 左端吸着
                 else -> (newWidth / 2f - sizePx / 2f).toInt()      // 中央寄り → 中央配置
             }
-            micParams.y = micParams.y.coerceIn(topMargin, newHeight - sizePx - topMargin)
+            // y も画面高さに対する比率で再配置（下端に置いたら下端に居続けるように）
+            val yRatio = if (screenHeight > 0) micParams.y.toFloat() / screenHeight else 0.5f
+            micParams.y = (newHeight * yRatio).toInt().coerceIn(edgeMargin, newHeight - sizePx - edgeMargin)
             try { wm.updateViewLayout(micButton, micParams) } catch (_: Exception) {}
         }
 
