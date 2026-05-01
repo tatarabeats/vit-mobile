@@ -302,6 +302,7 @@ class OverlayService : Service() {
     }
 
     private fun copyAndPaste(text: String) {
+        Prefs.addHistory(this, text)
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("VIT", text))
         val intent = Intent(InputAccessibilityService.ACTION_PASTE).apply {

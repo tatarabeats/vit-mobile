@@ -1,12 +1,19 @@
 package com.shunp.vitmobile
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.shunp.vitmobile.databinding.ActivityMainBinding
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
@@ -93,6 +100,40 @@ class MainActivity : AppCompatActivity() {
             stopService(Intent(this, OverlayService::class.java))
             Toast.makeText(this, "停止しました", Toast.LENGTH_SHORT).show()
         }
+
+        b.btnHistory.setOnClickListener { showHistoryDialog() }
+    }
+
+    private fun showHistoryDialog() {
+        val items = Prefs.getHistory(this)
+        if (items.isEmpty()) {
+            Toast.makeText(this, "履歴はまだありません", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val fmt = SimpleDateFormat("MM/dd HH:mm", Locale.JAPAN)
+        val labels = items.map { (ts, text) ->
+            "[${fmt.format(Date(ts))}] $text"
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("履歴 ${items.size} 件 (タップでコピー)")
+            .setItems(labels) { _, which ->
+                val text = items[which].second
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("VIT", text))
+                Toast.makeText(this, "コピーしました", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("全クリア") { _, _ ->
+                AlertDialog.Builder(this)
+                    .setMessage("履歴を全部消しますか？")
+                    .setPositiveButton("消す") { _, _ ->
+                        Prefs.clearHistory(this)
+                        Toast.makeText(this, "履歴を削除しました", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("キャンセル", null)
+                    .show()
+            }
+            .setPositiveButton("閉じる", null)
+            .show()
     }
 
     private fun isAccessibilityEnabled(): Boolean {

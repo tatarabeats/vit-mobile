@@ -224,6 +224,15 @@
             android:textColor="#FFFFFFFF"
             android:backgroundTint="#FF1A2440" />
 
+        <Button
+            android:id="@+id/btnHistory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="履歴を見る"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

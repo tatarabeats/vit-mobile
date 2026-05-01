@@ -1,6 +1,8 @@
 package com.shunp.vitmobile
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 
 object Prefs {
     private const val PREFS = "vit_prefs"
@@ -9,6 +11,8 @@ object Prefs {
     private const val KEY_LLM_FIX = "llm_fix_enabled"
     private const val KEY_DICT = "dictionary"
     private const val KEY_SNIPPETS = "snippets"
+    private const val KEY_HISTORY = "history_json"
+    private const val MAX_HISTORY = 50
 
     fun getGroqKey(ctx: Context): String? =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -75,5 +79,38 @@ object Prefs {
             }
         }
         return recognized
+    }
+
+    // --- 履歴 ---
+    fun addHistory(ctx: Context, text: String) {
+        if (text.isBlank()) return
+        val sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val raw = sp.getString(KEY_HISTORY, "[]") ?: "[]"
+        val arr = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+        val newArr = JSONArray()
+        // 新しいものを先頭に追加
+        newArr.put(JSONObject().put("ts", System.currentTimeMillis()).put("text", text))
+        for (i in 0 until minOf(arr.length(), MAX_HISTORY - 1)) {
+            try { newArr.put(arr.getJSONObject(i)) } catch (_: Exception) {}
+        }
+        sp.edit().putString(KEY_HISTORY, newArr.toString()).apply()
+    }
+
+    /** Pair<タイムスタンプ(ミリ秒), テキスト> のリスト。新しい順 */
+    fun getHistory(ctx: Context): List<Pair<Long, String>> {
+        val sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val raw = sp.getString(KEY_HISTORY, "[]") ?: "[]"
+        return try {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).map {
+                val o = arr.getJSONObject(it)
+                o.optLong("ts") to o.optString("text")
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    fun clearHistory(ctx: Context) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().remove(KEY_HISTORY).apply()
     }
 }
