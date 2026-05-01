@@ -1,5 +1,6 @@
 package com.shunp.vitmobile
 
+import android.animation.ValueAnimator
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -22,6 +23,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -241,6 +243,9 @@ class OverlayService : Service() {
                         val rightEdge = micParams.x + sizePx
                         if (rightEdge > screenWidth + edgeOverflowPx) {
                             collapse()
+                        } else {
+                            // 近い方の画面端へスムーズに吸着
+                            snapMicToNearestEdge()
                         }
                     }
                     true
@@ -248,6 +253,22 @@ class OverlayService : Service() {
                 else -> false
             }
         }
+    }
+
+    private fun snapMicToNearestEdge() {
+        val sizePx = (density * 56).toInt()
+        val marginX = (density * 8).toInt()
+        val centerX = micParams.x + sizePx / 2
+        val targetX = if (centerX < screenWidth / 2) marginX else screenWidth - sizePx - marginX
+        if (micParams.x == targetX) return
+        val animator = ValueAnimator.ofInt(micParams.x, targetX)
+        animator.duration = 220
+        animator.interpolator = DecelerateInterpolator(2.0f)
+        animator.addUpdateListener { va ->
+            micParams.x = va.animatedValue as Int
+            try { wm.updateViewLayout(micButton, micParams) } catch (_: Exception) {}
+        }
+        animator.start()
     }
 
     private fun collapse() {
