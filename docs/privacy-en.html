@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VIT Mobile Privacy Policy</title>
+    <style>
+      body {
+        font-family: -apple-system, "Segoe UI", sans-serif;
+        max-width: 720px;
+        margin: 2em auto;
+        padding: 0 1em;
+        line-height: 1.7;
+        color: #222;
+      }
+      h1 {
+        border-bottom: 2px solid #333;
+        padding-bottom: 0.3em;
+      }
+      h2 {
+        margin-top: 2em;
+        border-left: 4px solid #555;
+        padding-left: 0.5em;
+      }
+      code {
+        background: #f4f4f4;
+        padding: 0 0.3em;
+        border-radius: 3px;
+      }
+      .lang {
+        text-align: right;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <p class="lang"><a href="privacy.html">日本語</a></p>
+
+    <h1>VIT Mobile Privacy Policy</h1>
+    <p>Last updated: May 3, 2026</p>
+
+    <p>
+      VIT Mobile ("the App") is a tool that converts your voice input into text
+      and inserts it into other apps. This policy describes what data the App
+      collects and uses.
+    </p>
+
+    <h2>1. Information Collected</h2>
+    <p>
+      The App accesses the following information only while you are actively
+      using it:
+    </p>
+    <ul>
+      <li>
+        <strong>Audio data</strong>: Audio recorded while the microphone button
+        is pressed. Recordings are sent to a transcription API and not persisted
+        on the device or on any server after transcription.
+      </li>
+      <li>
+        <strong>Transcribed text</strong>: Text converted from your voice. Used
+        for clipboard copy and saved to the device's local history file
+        (<code>history.json</code>).
+      </li>
+      <li>
+        <strong>API keys</strong>: The Groq API key (and optionally Anthropic
+        API key) you enter. Stored locally in <code>SharedPreferences</code> and
+        not transmitted to any party except the corresponding API service over
+        HTTPS.
+      </li>
+    </ul>
+
+    <h2>2. Transmission to Third-Party Services</h2>
+    <p>
+      The App transmits audio and text to the following third-party services for
+      transcription and optional text correction:
+    </p>
+    <ul>
+      <li>
+        <strong>Groq Inc.</strong> (<a href="https://groq.com/privacy-policy/"
+          >Privacy Policy</a
+        >): Audio data is sent to the <code>whisper-large-v3-turbo</code> model
+        for transcription.
+      </li>
+      <li>
+        <strong>Anthropic, PBC</strong> (<a
+          href="https://www.anthropic.com/legal/privacy"
+          >Privacy Policy</a
+        >): Only if you enable the optional text correction feature, transcribed
+        text is sent to the Claude model. Disabled by default.
+      </li>
+    </ul>
+    <p>
+      The App does not operate its own servers. Your data is not transmitted to
+      the App developer.
+    </p>
+
+    <h2>3. Information Stored on Device</h2>
+    <ul>
+      <li>API keys: <code>SharedPreferences</code></li>
+      <li>
+        History: <code>files/history.json</code> in the app's internal storage
+      </li>
+      <li>Settings: <code>SharedPreferences</code></li>
+    </ul>
+    <p>All of the above are deleted when you uninstall the App.</p>
+
+    <h2>4. Permissions</h2>
+    <ul>
+      <li><strong>Microphone</strong>: For voice input.</li>
+      <li>
+        <strong>Display over other apps</strong>: To show the floating
+        microphone icon.
+      </li>
+      <li>
+        <strong>Accessibility Service</strong>: To insert transcribed text into
+        the focused text field of other apps. The App does not read the content
+        of input fields. It only sends <code>ACTION_PASTE</code> events.
+      </li>
+      <li>
+        <strong>Internet</strong>: For communication with third-party APIs.
+      </li>
+    </ul>
+
+    <h2>5. Children's Privacy</h2>
+    <p>The App is not intended for children under 13.</p>
+
+    <h2>6. Changes to This Policy</h2>
+    <p>
+      This policy may be updated without prior notice. Material changes will be
+      notified in the App or on this page.
+    </p>
+
+    <h2>7. Contact</h2>
+    <p>For questions about this policy, please contact:</p>
+    <p>Email: <a href="mailto:vitmic@outlook.jp">vitmic@outlook.jp</a></p>
+  </body>
+</html>

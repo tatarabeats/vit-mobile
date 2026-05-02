@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VIT Mobile プライバシーポリシー</title>
+    <style>
+      body {
+        font-family:
+          -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+        max-width: 720px;
+        margin: 2em auto;
+        padding: 0 1em;
+        line-height: 1.7;
+        color: #222;
+      }
+      h1 {
+        border-bottom: 2px solid #333;
+        padding-bottom: 0.3em;
+      }
+      h2 {
+        margin-top: 2em;
+        border-left: 4px solid #555;
+        padding-left: 0.5em;
+      }
+      code {
+        background: #f4f4f4;
+        padding: 0 0.3em;
+        border-radius: 3px;
+      }
+      .lang {
+        text-align: right;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <p class="lang"><a href="privacy-en.html">English</a></p>
+
+    <h1>VIT Mobile プライバシーポリシー</h1>
+    <p>最終更新日: 2026年5月3日</p>
+
+    <p>
+      VIT
+      Mobile（以下「本アプリ」）は、ユーザーの音声入力をテキストに変換し、他のアプリに挿入するためのツールです。本ポリシーは、本アプリがどのようなデータを収集・使用するかを説明します。
+    </p>
+
+    <h2>1. 収集する情報</h2>
+    <p>
+      本アプリは、以下の情報をユーザーが本アプリを使用する間にのみ取得します。
+    </p>
+    <ul>
+      <li>
+        <strong>音声データ</strong>:
+        マイクボタンを押している間に録音される音声。録音は文字起こし API
+        に送信された後、端末上でもサーバー上でも永続化されません。
+      </li>
+      <li>
+        <strong>文字起こし結果テキスト</strong>:
+        音声から変換されたテキスト。クリップボードへのコピーおよび端末内の履歴ファイル（<code>history.json</code>）への保存のために使用します。
+      </li>
+      <li>
+        <strong>API キー</strong>: ユーザーが入力した Groq API
+        キー（および任意で Anthropic API キー）。端末内の
+        <code>SharedPreferences</code>
+        に保存され、外部には送信されません（ただし、各 API への通信時には HTTPS
+        で当該サービスに送信されます）。
+      </li>
+    </ul>
+
+    <h2>2. 第三者サービスへの送信</h2>
+    <p>
+      本アプリは、文字起こしと任意の文章補正のため、以下の第三者サービスに音声およびテキストを送信します。
+    </p>
+    <ul>
+      <li>
+        <strong>Groq Inc.</strong> (<a href="https://groq.com/privacy-policy/"
+          >プライバシーポリシー</a
+        >): 音声データを
+        <code>whisper-large-v3-turbo</code>
+        モデルに送信し、テキストに変換します。
+      </li>
+      <li>
+        <strong>Anthropic, PBC</strong> (<a
+          href="https://www.anthropic.com/legal/privacy"
+          >プライバシーポリシー</a
+        >):
+        文章補正機能（オプション）を有効にした場合のみ、文字起こし結果テキストを
+        Claude モデルに送信します。デフォルトでは無効です。
+      </li>
+    </ul>
+    <p>
+      本アプリは独自のサーバーを持ちません。ユーザーのデータは本アプリの開発者には送信されません。
+    </p>
+
+    <h2>3. 端末内に保存される情報</h2>
+    <ul>
+      <li>API キー: <code>SharedPreferences</code></li>
+      <li>履歴: アプリ内部ストレージの <code>files/history.json</code></li>
+      <li>設定: <code>SharedPreferences</code></li>
+    </ul>
+    <p>これらは本アプリのアンインストール時にすべて削除されます。</p>
+
+    <h2>4. 権限</h2>
+    <ul>
+      <li><strong>マイク</strong>: 音声入力のため。</li>
+      <li>
+        <strong>他のアプリの上に表示</strong>:
+        フロートマイクアイコンの表示のため。
+      </li>
+      <li>
+        <strong>ユーザー補助サービス</strong>:
+        文字起こし結果を他のアプリのフォーカスされたテキスト入力欄に挿入するため。本アプリは入力欄の内容を読み取りません。<code
+          >ACTION_PASTE</code
+        >
+        イベントの送信のみを行います。
+      </li>
+      <li><strong>インターネット</strong>: 第三者 API への通信のため。</li>
+    </ul>
+
+    <h2>5. 子供のプライバシー</h2>
+    <p>本アプリは 13 歳未満の子供を対象としていません。</p>
+
+    <h2>6. ポリシーの変更</h2>
+    <p>
+      本ポリシーは予告なく変更されることがあります。重要な変更がある場合は、アプリ内またはこのページで通知します。
+    </p>
+
+    <h2>7. お問い合わせ</h2>
+    <p>本ポリシーに関するご質問は、以下までご連絡ください。</p>
+    <p>
+      連絡先メール: <a href="mailto:vitmic@outlook.jp">vitmic@outlook.jp</a>
+    </p>
+  </body>
+</html>
