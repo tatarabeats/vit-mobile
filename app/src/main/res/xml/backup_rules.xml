@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
+    <!-- APIキー入りのSharedPreferencesはクラウドバックアップに含めない -->
     <exclude domain="sharedpref" path="vit_prefs.xml" />
+    <!-- 履歴は端末バックアップに含める（アップデート/復元で残す） -->
+    <include domain="file" path="history.json" />
 </full-backup-content>

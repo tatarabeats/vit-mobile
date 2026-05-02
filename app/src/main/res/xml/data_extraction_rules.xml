@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
+        <!-- APIキー入りのSharedPreferencesは除外 -->
         <exclude domain="sharedpref" path="vit_prefs.xml" />
+        <!-- 履歴ファイルはクラウドバックアップに含める -->
+        <include domain="file" path="history.json" />
     </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="vit_prefs.xml" />
+        <include domain="file" path="history.json" />
+    </device-transfer>
 </data-extraction-rules>
