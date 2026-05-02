@@ -24,6 +24,17 @@ android {
             keyAlias = "vitmobile"
             keyPassword = "android"
         }
+        // Release 署名は環境変数から（GitHub Actions で base64 デコードされた release.keystore を期待）
+        // ローカルでは ~/.gradle/gradle.properties に同等のキーを置く運用も可
+        create("release") {
+            val storeFilePath = System.getenv("STORE_FILE")
+            if (storeFilePath != null) {
+                storeFile = file(storeFilePath)
+                storePassword = System.getenv("STORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -31,6 +42,10 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
+            // STORE_FILE が設定されてる時のみ release 署名を使う
+            if (System.getenv("STORE_FILE") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
