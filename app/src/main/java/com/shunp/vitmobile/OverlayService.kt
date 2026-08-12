@@ -55,6 +55,8 @@ class OverlayService : Service() {
     private var watcherView: View? = null
     private var stripsAttached = false
     private var zeroCoordCount = 0
+    /** ACTION_OUTSIDE の座標が隠される端末か（Android 12+ の制限） */
+    private var coordsBlind = false
     private var statusView: View? = null
     private var statusText: android.widget.TextView? = null
     private var statusDot: View? = null
@@ -251,15 +253,18 @@ class OverlayService : Service() {
      */
     private fun onOutsideTouch(x: Float, y: Float) {
         if (x == 0f && y == 0f) {
-            zeroCoordCount++
-            if (zeroCoordCount >= 3 && !Prefs.isVolumeTrigger(this)) {
-                // 画面のタッチは絶対に奪わない。座標が取れない端末では
-                // 音量キー2回押しへ逃がす（画面には一切触らない）
-                Prefs.setVolumeTrigger(this, true)
-                flashStatus("音量キー2回押しで起動に切り替えた")
-            }
+            // 座標が隠される端末（Android 12+ の制限）。位置で絞れないので
+            // 「画面のどこでもダブルタップ」で動かす。ただしキーボードが出ている間は
+            // 文字消しの連打と衝突するので完全に無視する。
+            coordsBlind = true
+            if (InputAccessibilityService.imeTop() >= 0) return
+            val nowBlind = System.currentTimeMillis()
+            val quickBlind = nowBlind - lastTapAt < 220
+            lastTapAt = nowBlind
+            if (!quickBlind) { tapCount = 0; onEdgeTap(reset = true) } else onEdgeTap(reset = false)
             return
         }
+        coordsBlind = false
         zeroCoordCount = 0
         val band = density * BAND_W_DP
         if (x > band && x < screenWidth - band) return
@@ -398,7 +403,12 @@ class OverlayService : Service() {
     /** 帯がどこにあるかを5秒だけ見せる（触れない状態で出すので操作は邪魔しない） */
     private fun enterZoneEditMode() {
         if (triggerMode != Prefs.TRIGGER_ZONE) return
-        Toast.makeText(this, "この帯の中ならどこでもダブルタップで起動する", Toast.LENGTH_LONG).show()
+        Toast.makeText(
+            this,
+            if (coordsBlind) "この端末は座標が取れないので、画面のどこでもダブルタップで起動する（キーボード表示中は無効）"
+            else "この帯の中ならどこでもダブルタップで起動する",
+            Toast.LENGTH_LONG
+        ).show()
         showZoneHint(overlayType(), 5000)
     }
 

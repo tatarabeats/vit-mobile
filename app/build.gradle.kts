@@ -10,11 +10,13 @@ android {
     defaultConfig {
         applicationId = "com.shunp.vitmobile"
         minSdk = 26
-        // targetSdk = 31 (Android 12) で Restricted Settings ガードを回避
-        // Android 13+ のサイドロードアプリの Accessibility 有効化制限を無効化する
-        targetSdk = 31
-        versionCode = 31
-        versionName = "0.8.0"
+        // targetSdk = 30 (Android 11)。理由は2つ:
+        //  1) Android 13+ のサイドロードアプリに対する Accessibility 制限を回避（<=31 が条件）
+        //  2) Android 12 の「他アプリ上の ACTION_OUTSIDE 座標を隠す」制限を避け、
+        //     起動ゾーンの位置判定に座標を使えるようにする（2026-08-12）
+        targetSdk = 30
+        versionCode = 32
+        versionName = "0.8.1"
     }
 
     signingConfigs {
