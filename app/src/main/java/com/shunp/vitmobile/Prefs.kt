@@ -16,6 +16,7 @@ object Prefs {
     private const val MAX_HISTORY = 50
     private const val KEY_TRIGGER = "trigger_mode"
     private const val KEY_GITHUB_TOKEN = "github_token"
+    private const val KEY_ZONE_PASSIVE = "zone_passive"
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
     const val TRIGGER_ZONE = "zone"
@@ -28,6 +29,21 @@ object Prefs {
     fun setTriggerMode(ctx: Context, mode: String) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_TRIGGER, mode).apply()
+    }
+
+    /**
+     * true（既定）= キワのタッチを一切横取りしない方式。
+     * 中央を覆う触れない窓の ACTION_OUTSIDE でキワのタップだけ検知する。
+     * スクロールも普通のタップも下のアプリにそのまま流れる。
+     * 端末側でこの通知が来ない場合に備えて、帯を占有する確実方式に切り替えられるようにしてある。
+     */
+    fun isZonePassive(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ZONE_PASSIVE, true)
+
+    fun setZonePassive(ctx: Context, passive: Boolean) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_ZONE_PASSIVE, passive).apply()
     }
 
     fun getGithubToken(ctx: Context): String? =

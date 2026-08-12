@@ -66,6 +66,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        b.zonePassiveSwitch.isChecked = Prefs.isZonePassive(this)
+        b.zonePassiveSwitch.setOnCheckedChangeListener { _, checked ->
+            Prefs.setZonePassive(this, checked)
+            if (isOverlayRunning()) {
+                // サービスを入れ直して方式を切り替える
+                stopService(Intent(this, OverlayService::class.java))
+                startForegroundService(Intent(this, OverlayService::class.java))
+            }
+            Toast.makeText(
+                this,
+                if (checked) "キワのタップを奪わない方式にした" else "帯を占有する確実方式にした",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
         b.btnEditZone.setOnClickListener {
             if (Prefs.getTriggerMode(this) != Prefs.TRIGGER_ZONE) {
                 Toast.makeText(this, "起動ゾーンをONにしてから確認してください", Toast.LENGTH_SHORT).show()

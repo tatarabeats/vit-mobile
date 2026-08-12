@@ -36,18 +36,10 @@ class OverlayService : Service() {
         /** 起動方法の設定が変わった時に呼ぶ（オーバーレイを作り直す） */
         const val ACTION_RELOAD_TRIGGER = "com.shunp.vitmobile.RELOAD_TRIGGER"
 
-        /** 帯の幅。狭いほど下のアプリを邪魔しない */
-        const val EDGE_W_DP = 26
-
         /**
-         * 最端から内側へ空ける幅。ここを空けないと **戻るジェスチャー**（端からのスワイプ）を
-         * 飲み込んでしまう。OSの戻り判定はおよそ端から20dp なので、その外へ出す。
-         */
-        const val EDGE_INSET_DP = 22
-
-        /** 上下に空ける量。ステータスバーの引き下ろしとナビゲーションバーを avoid */
-        const val EDGE_TOP_DP = 96
-        const val EDGE_BOTTOM_DP = 160
+          * 左右のキワの帯の幅。タッチを横取りしないので、広めに取っても下のアプリに影響しない。
+          */
+        const val BAND_W_DP = 40
     }
 
     private lateinit var wm: WindowManager
@@ -58,6 +50,8 @@ class OverlayService : Service() {
     private var hotZone: View? = null
     private var zoneParams: WindowManager.LayoutParams? = null
     private val zoneViews = mutableListOf<View>()
+    private var watcherView: View? = null
+    private var stripsAttached = false
     private var historyCard: View? = null
     private var tapCount = 0
     private var lastTapAt = 0L
@@ -196,75 +190,138 @@ class OverlayService : Service() {
     }
 
     // ==================== 起動ゾーン（既定の起動方法） ====================
-    // 画面の左右のキワに、見えない縦帯を1本ずつ置く。**そのどこをダブルタップしても**録音が始まる。
-    // 「特定の1点」だと場所を覚えていないと使えないため、キワ全体に広げた（2026-08-12）。
-    //   ダブルタップ … 録音開始 / 録音中はシングルタップで確定して挿入
-    //   3回タップ … 履歴
-    //   長押し（待機中）… フィードバック録音 / 長押し（録音中）… キャンセル
-    //   待機中のシングルタップ … 下のアプリへ素通し（キワの普通のタップを殺さないため）
+    // 画面の左右のキワ（縦帯）をダブルタップすると録音が始まる。
+    //
+    // **タッチは一切横取りしない**（2026-08-12 の作り直し）。
+    // 帯に触れる窓を置くと、そこから始まるスクロールも普通のタップも死ぬ。
+    // 代わりに「画面中央を覆う *触れない* 監視窓」を置き、その窓の外＝左右のキワに
+    // 指が降りた事実だけを FLAG_WATCH_OUTSIDE_TOUCH の ACTION_OUTSIDE で受け取る。
+    // ACTION_OUTSIDE はイベントを消費しないので、下のアプリの操作は完全に無傷。
+    //
+    //   2回タップ … 録音開始   3回タップ … 履歴   4回タップ … フィードバック録音
+    //   録音中のタップ … 確定して挿入 / 録音中の長押し … キャンセル
+    //     （録音中だけは帯を実体化する。この数秒は下のアプリを触らないため）
     private fun setupHotZone(overlayType: Int) {
-        val w = (density * EDGE_W_DP).toInt()
-        val inset = (density * EDGE_INSET_DP).toInt()
-        val top = (density * EDGE_TOP_DP).toInt()
-        val bottom = (density * EDGE_BOTTOM_DP).toInt()
-        val h = maxOf((density * 120).toInt(), screenHeight - top - bottom)
-
-        val right = createZone(overlayType, screenWidth - inset - w, top, w, h)
-        hotZone = right.first
-        zoneParams = right.second
-        createZone(overlayType, inset, top, w, h)
-
-        // 起動直後の3秒だけ帯を見せる。見えない当たり判定は場所が分からないと使えない
-        zoneViews.forEach { it.setBackgroundResource(R.drawable.zone_edit) }
-        mainHandler.postDelayed({ updateZoneVisual() }, 3000)
+        if (Prefs.isZonePassive(this)) setupWatcher(overlayType)
+        showZoneHint(overlayType, 3000)
     }
 
-    private fun createZone(
-        overlayType: Int,
-        x: Int,
-        y: Int,
-        w: Int,
-        h: Int
-    ): Pair<View, WindowManager.LayoutParams> {
+    /** 画面中央を覆う触れない窓。ここに来る ACTION_OUTSIDE ＝ 左右のキワへのタッチ */
+    private fun setupWatcher(overlayType: Int) {
+        val band = (density * BAND_W_DP).toInt()
+        val centerW = maxOf(1, screenWidth - band * 2)
         val params = WindowManager.LayoutParams(
-            w, h,
+            centerW, screenHeight,
+            overlayType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = band
+            y = 0
+        }
+        val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
+        view.setOnTouchListener { _, ev ->
+            if (ev.action == MotionEvent.ACTION_OUTSIDE) onEdgeTap()
+            false
+        }
+        watcherView = view
+        try { wm.addView(view, params) } catch (_: Exception) { watcherView = null }
+    }
+
+    /**
+     * キワに指が降りた。回数で意味を分ける。
+     * 遅延なしで進めたいので「2回目で即開始し、3回目で取り消して履歴」という積み上げにする。
+     */
+    private fun onEdgeTap() {
+        if (stripsAttached) return  // 録音中は帯側で拾うので二重に数えない
+        val now = System.currentTimeMillis()
+        tapCount = if (now - lastTapAt < 450) tapCount + 1 else 1
+        lastTapAt = now
+        when (tapCount) {
+            2 -> {
+                flashZone()
+                if (!isRecording) startRecording(feedback = false) else stopRecording()
+            }
+            3 -> {
+                if (isRecording) cancelRecording()
+                showHistoryCard()
+            }
+            4 -> {
+                hideHistoryCard()
+                startRecording(feedback = true)
+                Toast.makeText(this, "フィードバック録音中。タップで送信", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // ---- 帯の実体（録音中と、場所を見せる時だけ出す） ----
+
+    private fun stripParams(overlayType: Int, left: Boolean): WindowManager.LayoutParams {
+        val band = (density * BAND_W_DP).toInt()
+        return WindowManager.LayoutParams(
+            band, screenHeight,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            this.x = x
-            this.y = y
+            x = if (left) 0 else screenWidth - band
+            y = 0
         }
-        val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
-        attachZoneTouchListener(view)
-        zoneViews.add(view)
-        try { wm.addView(view, params) } catch (_: Exception) {}
-        return view to params
     }
 
-    /**
-     * 待機中の1回タップを、下のアプリへそのまま流す。
-     * 帯を触れなくしてからユーザー補助でタップを打ち直し、150ms後に元に戻す
-     * （触れるままだと自分で拾い直して無限に跳ね返る）。
-     */
-    private fun passThroughTap(x: Float, y: Float) {
-        setZonesTouchable(false)
-        val ok = InputAccessibilityService.passThroughTap(x, y)
-        mainHandler.postDelayed({ setZonesTouchable(true) }, if (ok) 200 else 0)
+    private fun overlayType(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        else
+            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+
+    /** 録音中だけ帯を触れる状態で出す（確定タップ・キャンセル長押しを確実に拾うため） */
+    private fun attachStrips(touchable: Boolean) {
+        if (stripsAttached) return
+        val type = overlayType()
+        for (left in listOf(true, false)) {
+            val params = stripParams(type, left)
+            if (!touchable) params.flags = params.flags or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
+            if (touchable) attachZoneTouchListener(view)
+            zoneViews.add(view)
+            if (!left) { hotZone = view; zoneParams = params }
+            try { wm.addView(view, params) } catch (_: Exception) {}
+        }
+        stripsAttached = true
+        updateZoneVisual()
     }
 
-    private fun setZonesTouchable(touchable: Boolean) {
-        for (view in zoneViews) {
-            val p = view.layoutParams as? WindowManager.LayoutParams ?: continue
-            p.flags = if (touchable) {
-                p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-            } else {
-                p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-            }
-            try { wm.updateViewLayout(view, p) } catch (_: Exception) {}
-        }
+    /** タッチを横取りしない方式では、録音が終わったら帯を消して完全に無干渉へ戻す */
+    private fun releaseStripsIfPassive() {
+        if (Prefs.isZonePassive(this) && !zoneEditMode) detachStrips()
+    }
+
+    private fun detachStrips() {
+        zoneViews.forEach { v -> try { wm.removeView(v) } catch (_: Exception) {} }
+        zoneViews.clear()
+        hotZone = null
+        zoneParams = null
+        stripsAttached = false
+    }
+
+    /** 帯の場所を一定時間だけ見せる（触れない状態で出すので操作は邪魔しない） */
+    private fun showZoneHint(overlayType: Int, ms: Long) {
+        if (stripsAttached) return
+        attachStrips(touchable = !Prefs.isZonePassive(this))
+        zoneEditMode = true
+        zoneViews.forEach { it.setBackgroundResource(R.drawable.zone_edit) }
+        mainHandler.postDelayed({
+            zoneEditMode = false
+            if (Prefs.isZonePassive(this) && !isRecording) detachStrips() else updateZoneVisual()
+        }, ms)
     }
 
     private fun attachZoneTouchListener(view: View) {
@@ -273,17 +330,15 @@ class OverlayService : Service() {
             override fun onDown(e: MotionEvent): Boolean = true
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                if (zoneEditMode) { exitZoneEditMode(); return true }
+                if (zoneEditMode) return true
                 flashZone()
-                if (!isRecording) startRecording(feedback = false)
-                else stopRecording()
+                if (!isRecording) startRecording(feedback = false) else stopRecording()
                 return true
             }
 
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 if (zoneEditMode) return true
                 if (isRecording) stopRecording()
-                else passThroughTap(e.rawX, e.rawY)
                 return true
             }
 
@@ -304,7 +359,7 @@ class OverlayService : Service() {
         })
 
         view.setOnTouchListener { _, ev ->
-            // 3回タップ = 履歴。2打目で始まった録音を取り消して直近5件を出す
+            // 3回タップ = 履歴（帯を実体化している時の経路）
             if (!zoneEditMode && ev.action == MotionEvent.ACTION_DOWN) {
                 val now = System.currentTimeMillis()
                 tapCount = if (now - lastTapAt < 450) tapCount + 1 else 1
@@ -321,20 +376,11 @@ class OverlayService : Service() {
         }
     }
 
-    /** 帯がどこにあるかを5秒だけ見せる（位置は左右のキワで固定なので、確認だけ） */
+    /** 帯がどこにあるかを5秒だけ見せる（触れない状態で出すので操作は邪魔しない） */
     private fun enterZoneEditMode() {
         if (triggerMode != Prefs.TRIGGER_ZONE) return
-        if (zoneViews.isEmpty()) return
-        zoneEditMode = true
-        zoneViews.forEach { it.setBackgroundResource(R.drawable.zone_edit) }
         Toast.makeText(this, "この帯の中ならどこでもダブルタップで起動する", Toast.LENGTH_LONG).show()
-        mainHandler.postDelayed({ exitZoneEditMode() }, 5000)
-    }
-
-    private fun exitZoneEditMode() {
-        if (zoneViews.isEmpty() || !zoneEditMode) return
-        zoneEditMode = false
-        updateZoneVisual()
+        showZoneHint(overlayType(), 5000)
     }
 
     /** 起動方法の設定変更を反映（バー ⇔ 透明ゾーン） */
@@ -345,11 +391,7 @@ class OverlayService : Service() {
         removeAllViews()
         triggerMode = newMode
         if (newMode == Prefs.TRIGGER_ZONE) {
-            val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
-            setupHotZone(overlayType)
+            setupHotZone(overlayType())
         } else {
             isCollapsed = false
             try { wm.addView(micButton, micParams) } catch (_: Exception) {}
@@ -359,10 +401,9 @@ class OverlayService : Service() {
     private fun removeAllViews() {
         stopLevelMeter()
         hideHistoryCard()
-        zoneViews.forEach { v -> try { wm.removeView(v) } catch (_: Exception) {} }
-        zoneViews.clear()
-        hotZone = null
-        zoneParams = null
+        detachStrips()
+        watcherView?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
+        watcherView = null
         zoneEditMode = false
         try { wm.removeView(micButton) } catch (_: Exception) {}
         try { wm.removeView(collapseTab) } catch (_: Exception) {}
@@ -536,6 +577,12 @@ class OverlayService : Service() {
             micButton.imageTintList = ColorStateList.valueOf(navy)
             updateZoneVisual()
             startLevelMeter()
+            if (Prefs.isZonePassive(this) && triggerMode == Prefs.TRIGGER_ZONE) {
+                // 3回目・4回目のタップは監視窓側で拾いたいので、少し置いてから実体化する
+                mainHandler.postDelayed({
+                    if (isRecording) attachStrips(touchable = true)
+                }, 600)
+            }
             buzz(40)
             if (!feedback) toast("● 録音中 — タップで確定")
         }
@@ -548,6 +595,7 @@ class OverlayService : Service() {
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
         stopLevelMeter()
+        releaseStripsIfPassive()
         updateZoneVisual()
         buzz(20, 60, 20)
         toast(if (wasFeedback) "フィードバック送信中…" else "変換中…")
@@ -563,6 +611,7 @@ class OverlayService : Service() {
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
         stopLevelMeter()
+        releaseStripsIfPassive()
         updateZoneVisual()
         buzz(120)
         recorder?.cancel()
@@ -716,13 +765,10 @@ class OverlayService : Service() {
             screenWidth = newWidth
             screenHeight = newHeight
             hideHistoryCard()
-            zoneViews.forEach { v -> try { wm.removeView(v) } catch (_: Exception) {} }
-            zoneViews.clear()
-            val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
-            setupHotZone(overlayType)
+            detachStrips()
+            watcherView?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
+            watcherView = null
+            setupHotZone(overlayType())
             return
         }
 

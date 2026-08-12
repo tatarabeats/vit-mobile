@@ -180,6 +180,15 @@
             android:textColor="#FFFFFFFF"
             android:textSize="15sp" />
 
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/zonePassiveSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="キワのタッチを奪わない（スクロールも普通のタップもそのまま通す）"
+            android:textColor="#FFFFFFFF"
+            android:textSize="15sp" />
+
         <Button
             android:id="@+id/btnEditZone"
             android:layout_width="match_parent"
@@ -196,7 +205,7 @@
             android:textSize="13sp"
             android:textColor="#CCFFFFFF"
             android:lineSpacingExtra="4dp"
-            android:text="画面の左右のキワ（縦の帯）なら、どこでも同じ:\n・ダブルタップ → 録音開始\n・録音中にタップ → 確定して挿入\n・3回タップ → 履歴（枠外タップで閉じる）\n・録音中に長押し → キャンセル\n・待機中に長押し → フィードバック録音" />
+            android:text="画面の左右のキワ（縦の帯）なら、どこでも同じ:\n・2回タップ → 録音開始\n・録音中にタップ → 確定して挿入\n・3回タップ → 履歴（枠外タップで閉じる）\n・4回タップ → フィードバック録音\n・録音中に長押し → キャンセル" />
 
         <TextView
             android:layout_width="match_parent"
