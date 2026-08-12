@@ -210,6 +210,9 @@ class OverlayService : Service() {
         hotZone = view
         zoneParams = params
         try { wm.addView(view, params) } catch (_: Exception) {}
+        // 起動直後の3秒だけ枠を見せる。見えない当たり判定は場所が分からないと使えない
+        view.setBackgroundResource(R.drawable.zone_edit)
+        mainHandler.postDelayed({ updateZoneVisual() }, 3000)
     }
 
     private fun attachZoneTouchListener(view: View, params: WindowManager.LayoutParams) {
@@ -228,6 +231,7 @@ class OverlayService : Service() {
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 if (zoneEditMode) { exitZoneEditMode(); return true }
+                flashZone()
                 if (!isRecording) startRecording(feedback = false)
                 else stopRecording()
                 return true
@@ -495,6 +499,8 @@ class OverlayService : Service() {
             micButton.setBackgroundResource(R.drawable.mic_button_recording)
             micButton.imageTintList = ColorStateList.valueOf(navy)
             updateZoneVisual()
+            buzz(40)
+            if (!feedback) toast("● 録音中 — タップで確定")
         }
     }
 
@@ -505,8 +511,10 @@ class OverlayService : Service() {
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
         updateZoneVisual()
+        buzz(20, 60, 20)
+        toast(if (wasFeedback) "フィードバック送信中…" else "変換中…")
         recorder?.stopAndTranscribe { text ->
-            if (text.isNullOrBlank()) return@stopAndTranscribe
+            if (text.isNullOrBlank()) { toast("聞き取れなかった"); return@stopAndTranscribe }
             if (wasFeedback) Feedback.submit(this, text) else copyAndPaste(text)
         }
     }
@@ -517,7 +525,38 @@ class OverlayService : Service() {
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
         updateZoneVisual()
+        buzz(120)
         recorder?.cancel()
+    }
+
+    private fun toast(msg: String) {
+        mainHandler.post { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
+    }
+
+    /** 見えないゾーンを触った事を指で分かるようにする（画面を見なくても判る） */
+    private fun buzz(vararg patternMs: Long) {
+        try {
+            val vib = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager).defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
+            }
+            if (patternMs.size == 1) {
+                vib.vibrate(android.os.VibrationEffect.createOneShot(patternMs[0], 180))
+            } else {
+                val pattern = LongArray(patternMs.size + 1)
+                patternMs.forEachIndexed { i, v -> pattern[i + 1] = v }
+                vib.vibrate(android.os.VibrationEffect.createWaveform(pattern, -1))
+            }
+        } catch (_: Exception) {}
+    }
+
+    /** ダブルタップが当たった事を目でも分かるように一瞬光らせる */
+    private fun flashZone() {
+        val view = hotZone ?: return
+        if (zoneEditMode) return
+        view.setBackgroundColor(Color.parseColor("#55F0C040"))
+        mainHandler.postDelayed({ updateZoneVisual() }, 160)
     }
 
     private fun copyAndPaste(text: String) {
