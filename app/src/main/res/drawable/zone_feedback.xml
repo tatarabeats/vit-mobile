@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- フィードバック録音中。通常録音（赤）と区別するため金色 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:gravity="center"
+        android:width="12dp"
+        android:height="12dp">
+        <shape android:shape="oval">
+            <solid android:color="#FFF0C040" />
+            <stroke android:width="2dp" android:color="#66000000" />
+        </shape>
+    </item>
+</layer-list>

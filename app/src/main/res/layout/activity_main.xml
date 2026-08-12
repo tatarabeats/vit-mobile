@@ -166,6 +166,88 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="起動方法"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
+            android:paddingBottom="6dp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/zoneModeSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="透明ゾーンをダブルタップで起動（画面に何も出さない）"
+            android:textColor="#FFFFFFFF"
+            android:textSize="15sp" />
+
+        <Button
+            android:id="@+id/btnEditZone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="起動ゾーンの位置を調整"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="13sp"
+            android:textColor="#CCFFFFFF"
+            android:lineSpacingExtra="4dp"
+            android:text="ゾーン操作:\n・ダブルタップ → 録音開始\n・録音中にタップ → 確定して挿入\n・録音中に長押し → キャンセル\n・待機中に長押し → フィードバック録音" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="フィードバック送信（GitHubトークン）"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
+            android:paddingTop="20dp"
+            android:paddingBottom="6dp" />
+
+        <EditText
+            android:id="@+id/githubTokenInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="github_pat_..."
+            android:inputType="textPassword"
+            android:textColor="#FFFFFFFF"
+            android:textColorHint="#80FFFFFF"
+            android:background="#FF1A2440"
+            android:padding="14dp"
+            android:autofillHints="password" />
+
+        <Button
+            android:id="@+id/saveGithubToken"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="保存"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
+
+        <Button
+            android:id="@+id/btnSendFeedback"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="未送信のフィードバックを送る"
+            android:textColor="#FFFFFFFF"
+            android:backgroundTint="#FF1A2440" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="16dp"
+            android:background="#FFF0C040" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:text="3. 権限設定（初回のみ）"
             android:textStyle="bold"
             android:textSize="16sp"
@@ -211,7 +293,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="フロートマイクを起動"
+            android:text="起動"
             android:textColor="#FF0A0E1A"
             android:backgroundTint="#FFF0C040" />
 
@@ -240,6 +322,6 @@
             android:textSize="13sp"
             android:textColor="#CCFFFFFF"
             android:lineSpacingExtra="4dp"
-            android:text="使い方:\n・タップで録音開始/停止\n・録音中に長押しでキャンセル\n・ドラッグで位置移動" />
+            android:text="常時表示マイクの使い方:\n・タップで録音開始/停止\n・録音中に長押しでキャンセル\n・ドラッグで位置移動" />
     </LinearLayout>
 </ScrollView>

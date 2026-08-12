@@ -30,11 +30,26 @@ import androidx.core.app.NotificationCompat
 import kotlin.math.abs
 
 class OverlayService : Service() {
+    companion object {
+        /** 透明ゾーンを見える化してドラッグで動かせるようにする */
+        const val ACTION_EDIT_ZONE = "com.shunp.vitmobile.EDIT_ZONE"
+        /** 起動方法の設定が変わった時に呼ぶ（オーバーレイを作り直す） */
+        const val ACTION_RELOAD_TRIGGER = "com.shunp.vitmobile.RELOAD_TRIGGER"
+
+        val ZONE_W_DP = 44
+        val ZONE_H_DP = 150
+    }
+
     private lateinit var wm: WindowManager
     private lateinit var micButton: ImageView
     private lateinit var collapseTab: View
     private lateinit var micParams: WindowManager.LayoutParams
     private lateinit var tabParams: WindowManager.LayoutParams
+    private var hotZone: View? = null
+    private var zoneParams: WindowManager.LayoutParams? = null
+    private var zoneEditMode = false
+    private var isFeedback = false
+    private var triggerMode = Prefs.TRIGGER_ZONE
     private var recorder: VoiceRecorder? = null
     private var isRecording = false
     private var isCollapsed = false
@@ -57,7 +72,13 @@ class OverlayService : Service() {
         recorder = VoiceRecorder(this)
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_EDIT_ZONE -> enterZoneEditMode()
+            ACTION_RELOAD_TRIGGER -> reloadTrigger()
+        }
+        return START_STICKY
+    }
 
     private fun startAsForeground() {
         val chanId = "vit_overlay"
@@ -68,7 +89,11 @@ class OverlayService : Service() {
         }
         val notif: Notification = NotificationCompat.Builder(this, chanId)
             .setContentTitle("VIT Mobile 起動中")
-            .setContentText("マイクアイコンタップで音声入力")
+            .setContentText(
+                if (Prefs.getTriggerMode(this) == Prefs.TRIGGER_ZONE)
+                    "起動ゾーンをダブルタップで音声入力"
+                else "マイクアイコンタップで音声入力"
+            )
             .setSmallIcon(R.drawable.ic_mic)
             .setOngoing(true)
             .build()
@@ -147,7 +172,172 @@ class OverlayService : Service() {
 
         attachTouchListener()
         attachTabTouchListener()
-        wm.addView(micButton, micParams)
+
+        triggerMode = Prefs.getTriggerMode(this)
+        if (triggerMode == Prefs.TRIGGER_ZONE) {
+            setupHotZone(overlayType)
+        } else {
+            wm.addView(micButton, micParams)
+        }
+    }
+
+    // ==================== 透明ゾーン（既定の起動方法） ====================
+    // 画面に何も見えない小さな当たり判定を1つ置き、そこを **ダブルタップ** した時だけ録音を始める。
+    // 常時表示のバーが目障りという問題への対処（2026-08-12）。
+    //   ダブルタップ … 録音開始 / 録音中はシングルタップで確定して挿入
+    //   長押し（待機中）… フィードバック録音（結果は GitHub Issue へ）
+    //   長押し（録音中）… キャンセル
+    private fun setupHotZone(overlayType: Int) {
+        val zoneW = (density * ZONE_W_DP).toInt()
+        val zoneH = (density * ZONE_H_DP).toInt()
+        val (savedX, savedY) = Prefs.getZonePos(this)
+        val zx = if (savedX >= 0) savedX else screenWidth - zoneW
+        val zy = if (savedY >= 0) savedY else (screenHeight / 2) - (zoneH / 2)
+
+        val params = WindowManager.LayoutParams(
+            zoneW, zoneH,
+            overlayType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = zx
+            y = zy
+        }
+        val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
+        attachZoneTouchListener(view, params)
+        hotZone = view
+        zoneParams = params
+        try { wm.addView(view, params) } catch (_: Exception) {}
+    }
+
+    private fun attachZoneTouchListener(view: View, params: WindowManager.LayoutParams) {
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        val zoneW = (density * ZONE_W_DP).toInt()
+        val zoneH = (density * ZONE_H_DP).toInt()
+        var initialX = 0
+        var initialY = 0
+        var touchStartX = 0f
+        var touchStartY = 0f
+        var dragged = false
+
+        val detector = android.view.GestureDetector(this, object :
+            android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                if (zoneEditMode) { exitZoneEditMode(); return true }
+                if (!isRecording) startRecording(feedback = false)
+                else stopRecording()
+                return true
+            }
+
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                if (zoneEditMode) return true
+                if (isRecording) stopRecording()
+                return true
+            }
+
+            override fun onLongPress(e: MotionEvent) {
+                if (zoneEditMode) return
+                if (isRecording) {
+                    cancelRecording()
+                    Toast.makeText(this@OverlayService, "キャンセルしました", Toast.LENGTH_SHORT).show()
+                } else {
+                    startRecording(feedback = true)
+                    Toast.makeText(
+                        this@OverlayService,
+                        "フィードバック録音中。タップで送信",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        })
+
+        view.setOnTouchListener { _, ev ->
+            if (zoneEditMode) {
+                when (ev.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        initialX = params.x
+                        initialY = params.y
+                        touchStartX = ev.rawX
+                        touchStartY = ev.rawY
+                        dragged = false
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = (ev.rawX - touchStartX).toInt()
+                        val dy = (ev.rawY - touchStartY).toInt()
+                        if (abs(dx) > touchSlop || abs(dy) > touchSlop) dragged = true
+                        if (dragged) {
+                            params.x = (initialX + dx).coerceIn(0, maxOf(0, screenWidth - zoneW))
+                            params.y = (initialY + dy).coerceIn(0, maxOf(0, screenHeight - zoneH))
+                            try { wm.updateViewLayout(view, params) } catch (_: Exception) {}
+                        }
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        if (dragged) Prefs.setZonePos(this, params.x, params.y)
+                    }
+                }
+            }
+            detector.onTouchEvent(ev)
+            true
+        }
+    }
+
+    private fun enterZoneEditMode() {
+        if (triggerMode != Prefs.TRIGGER_ZONE) return
+        val view = hotZone ?: return
+        zoneEditMode = true
+        view.setBackgroundResource(R.drawable.zone_edit)
+        Toast.makeText(this, "ドラッグで位置を決めて、ダブルタップで確定", Toast.LENGTH_LONG).show()
+    }
+
+    private fun exitZoneEditMode() {
+        val view = hotZone ?: return
+        zoneEditMode = false
+        view.background = null
+        zoneParams?.let { Prefs.setZonePos(this, it.x, it.y) }
+        Toast.makeText(this, "起動ゾーンの位置を保存した", Toast.LENGTH_SHORT).show()
+    }
+
+    /** 起動方法の設定変更を反映（バー ⇔ 透明ゾーン） */
+    private fun reloadTrigger() {
+        val newMode = Prefs.getTriggerMode(this)
+        if (newMode == triggerMode) return
+        if (isRecording) cancelRecording()
+        removeAllViews()
+        triggerMode = newMode
+        if (newMode == Prefs.TRIGGER_ZONE) {
+            val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else
+                @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+            setupHotZone(overlayType)
+        } else {
+            isCollapsed = false
+            try { wm.addView(micButton, micParams) } catch (_: Exception) {}
+        }
+    }
+
+    private fun removeAllViews() {
+        hotZone?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
+        hotZone = null
+        zoneParams = null
+        zoneEditMode = false
+        try { wm.removeView(micButton) } catch (_: Exception) {}
+        try { wm.removeView(collapseTab) } catch (_: Exception) {}
+    }
+
+    /** 録音状態をゾーンの見た目に反映（待機中は完全に透明） */
+    private fun updateZoneVisual() {
+        val view = hotZone ?: return
+        if (zoneEditMode) return
+        when {
+            isRecording && isFeedback -> view.setBackgroundResource(R.drawable.zone_feedback)
+            isRecording -> view.setBackgroundResource(R.drawable.zone_recording)
+            else -> view.background = null
+        }
     }
 
     private fun attachTabTouchListener() {
@@ -295,30 +485,38 @@ class OverlayService : Service() {
     }
 
     private fun toggleRecord() {
-        if (isRecording) stopRecording() else startRecording()
+        if (isRecording) stopRecording() else startRecording(feedback = false)
     }
 
-    private fun startRecording() {
+    private fun startRecording(feedback: Boolean) {
         if (recorder?.start() == true) {
             isRecording = true
+            isFeedback = feedback
             micButton.setBackgroundResource(R.drawable.mic_button_recording)
             micButton.imageTintList = ColorStateList.valueOf(navy)
+            updateZoneVisual()
         }
     }
 
     private fun stopRecording() {
         isRecording = false
+        val wasFeedback = isFeedback
+        isFeedback = false
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
+        updateZoneVisual()
         recorder?.stopAndTranscribe { text ->
-            if (!text.isNullOrBlank()) copyAndPaste(text)
+            if (text.isNullOrBlank()) return@stopAndTranscribe
+            if (wasFeedback) Feedback.submit(this, text) else copyAndPaste(text)
         }
     }
 
     private fun cancelRecording() {
         isRecording = false
+        isFeedback = false
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
+        updateZoneVisual()
         recorder?.cancel()
     }
 
@@ -346,6 +544,22 @@ class OverlayService : Service() {
         val marginX = (density * 16).toInt()
         val edgeMargin = (density * 20).toInt()
         val tabH = (density * 70).toInt()
+
+        val zone = hotZone
+        val zp = zoneParams
+        if (zone != null && zp != null) {
+            // 透明ゾーンは画面比率を保って再配置（縦横の切り替えで画面外に消えないように）
+            val zoneW = (density * ZONE_W_DP).toInt()
+            val zoneH = (density * ZONE_H_DP).toInt()
+            val xRatio = if (screenWidth > 0) zp.x.toFloat() / screenWidth else 1f
+            val yRatio = if (screenHeight > 0) zp.y.toFloat() / screenHeight else 0.5f
+            zp.x = (newWidth * xRatio).toInt().coerceIn(0, maxOf(0, newWidth - zoneW))
+            zp.y = (newHeight * yRatio).toInt().coerceIn(0, maxOf(0, newHeight - zoneH))
+            try { wm.updateViewLayout(zone, zp) } catch (_: Exception) {}
+            screenWidth = newWidth
+            screenHeight = newHeight
+            return
+        }
 
         if (isCollapsed) {
             // 収納タブは常に画面右端に張り付く。y は旧画面高さに対する比率で新画面高さに再配置
@@ -377,7 +591,7 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         mainHandler.removeCallbacksAndMessages(null)
-        try { if (!isCollapsed) wm.removeView(micButton) else wm.removeView(collapseTab) } catch (_: Exception) {}
+        removeAllViews()
         recorder?.release()
     }
 }

@@ -54,6 +54,51 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "ショートカットを保存しました", Toast.LENGTH_SHORT).show()
         }
 
+        // 起動方法: 透明ゾーン（既定） ⇔ 常時表示マイク
+        b.zoneModeSwitch.isChecked = Prefs.getTriggerMode(this) == Prefs.TRIGGER_ZONE
+        b.zoneModeSwitch.setOnCheckedChangeListener { _, checked ->
+            Prefs.setTriggerMode(this, if (checked) Prefs.TRIGGER_ZONE else Prefs.TRIGGER_MIC)
+            if (isOverlayRunning()) {
+                startForegroundService(
+                    Intent(this, OverlayService::class.java)
+                        .setAction(OverlayService.ACTION_RELOAD_TRIGGER)
+                )
+            }
+        }
+
+        b.btnEditZone.setOnClickListener {
+            if (Prefs.getTriggerMode(this) != Prefs.TRIGGER_ZONE) {
+                Toast.makeText(this, "透明ゾーンをONにしてから調整してください", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (!isOverlayRunning()) {
+                Toast.makeText(this, "先に「起動」してください", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            startForegroundService(
+                Intent(this, OverlayService::class.java)
+                    .setAction(OverlayService.ACTION_EDIT_ZONE)
+            )
+            Toast.makeText(this, "ドラッグで位置を決めて、ダブルタップで確定", Toast.LENGTH_LONG).show()
+            moveTaskToBack(true)
+        }
+
+        b.githubTokenInput.setText(Prefs.getGithubToken(this) ?: "")
+        b.saveGithubToken.setOnClickListener {
+            Prefs.setGithubToken(this, b.githubTokenInput.text.toString().trim())
+            Toast.makeText(this, "GitHubトークンを保存しました", Toast.LENGTH_SHORT).show()
+            Feedback.flush(this)
+        }
+
+        b.btnSendFeedback.setOnClickListener {
+            val n = Feedback.pendingCount(this)
+            if (n == 0) {
+                Toast.makeText(this, "未送信のフィードバックはありません", Toast.LENGTH_SHORT).show()
+            } else {
+                Feedback.flush(this, quiet = false)
+            }
+        }
+
         b.btnOverlayPerm.setOnClickListener {
             startActivity(
                 Intent(
@@ -92,7 +137,10 @@ class MainActivity : AppCompatActivity() {
             }
             val intent = Intent(this, OverlayService::class.java)
             startForegroundService(intent)
-            Toast.makeText(this, "フロートマイクを起動しました", Toast.LENGTH_SHORT).show()
+            val msg = if (Prefs.getTriggerMode(this) == Prefs.TRIGGER_ZONE)
+                "起動した。ゾーンをダブルタップで録音"
+            else "フロートマイクを起動しました"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             moveTaskToBack(true)
         }
 
@@ -134,6 +182,14 @@ class MainActivity : AppCompatActivity() {
             }
             .setPositiveButton("閉じる", null)
             .show()
+    }
+
+    /** OverlayService が動いているか。API 26+ では自分のサービスだけが返る */
+    private fun isOverlayRunning(): Boolean {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        @Suppress("DEPRECATION")
+        return am.getRunningServices(Int.MAX_VALUE)
+            .any { it.service.className == OverlayService::class.java.name }
     }
 
     private fun isAccessibilityEnabled(): Boolean {

@@ -14,6 +14,43 @@ object Prefs {
     private const val KEY_SNIPPETS = "snippets"
     private const val KEY_HISTORY = "history_json"
     private const val MAX_HISTORY = 50
+    private const val KEY_TRIGGER = "trigger_mode"
+    private const val KEY_ZONE_X = "zone_x"
+    private const val KEY_ZONE_Y = "zone_y"
+    private const val KEY_GITHUB_TOKEN = "github_token"
+
+    /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
+    const val TRIGGER_ZONE = "zone"
+    const val TRIGGER_MIC = "mic"
+
+    fun getTriggerMode(ctx: Context): String =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_TRIGGER, TRIGGER_ZONE) ?: TRIGGER_ZONE
+
+    fun setTriggerMode(ctx: Context, mode: String) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_TRIGGER, mode).apply()
+    }
+
+    /** 透明ゾーンの位置（px）。未設定なら -1 を返す（呼び出し側で画面右端中央に配置） */
+    fun getZonePos(ctx: Context): Pair<Int, Int> {
+        val sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return sp.getInt(KEY_ZONE_X, -1) to sp.getInt(KEY_ZONE_Y, -1)
+    }
+
+    fun setZonePos(ctx: Context, x: Int, y: Int) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_ZONE_X, x).putInt(KEY_ZONE_Y, y).apply()
+    }
+
+    fun getGithubToken(ctx: Context): String? =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_GITHUB_TOKEN, null)
+
+    fun setGithubToken(ctx: Context, token: String) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_GITHUB_TOKEN, token).apply()
+    }
 
     fun getGroqKey(ctx: Context): String? =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
