@@ -65,7 +65,7 @@ object Feedback {
             writeQueue(ctx, remaining)
             if (!quiet) {
                 withContext(Dispatchers.Main) {
-                    val msg = if (sent > 0) "フィードバック送信 ($sent件)"
+                    val msg = if (sent > 0) "フィードバック送信 (${sent}件)"
                     else "送信失敗。端末に保存した"
                     Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
                 }
