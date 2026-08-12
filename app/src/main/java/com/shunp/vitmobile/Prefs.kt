@@ -17,6 +17,8 @@ object Prefs {
     private const val KEY_TRIGGER = "trigger_mode"
     private const val KEY_ZONE_X = "zone_x"
     private const val KEY_ZONE_Y = "zone_y"
+    private const val KEY_ZONE_LX = "zone_left_x"
+    private const val KEY_ZONE_LY = "zone_left_y"
     private const val KEY_GITHUB_TOKEN = "github_token"
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
@@ -41,6 +43,17 @@ object Prefs {
     fun setZonePos(ctx: Context, x: Int, y: Int) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putInt(KEY_ZONE_X, x).putInt(KEY_ZONE_Y, y).apply()
+    }
+
+    /** 左端ゾーンの位置（px）。未設定なら -1 */
+    fun getZonePosLeft(ctx: Context): Pair<Int, Int> {
+        val sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return sp.getInt(KEY_ZONE_LX, -1) to sp.getInt(KEY_ZONE_LY, -1)
+    }
+
+    fun setZonePosLeft(ctx: Context, x: Int, y: Int) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_ZONE_LX, x).putInt(KEY_ZONE_LY, y).apply()
     }
 
     fun getGithubToken(ctx: Context): String? =

@@ -47,6 +47,7 @@ class OverlayService : Service() {
     private lateinit var tabParams: WindowManager.LayoutParams
     private var hotZone: View? = null
     private var zoneParams: WindowManager.LayoutParams? = null
+    private val zoneViews = mutableListOf<View>()
     private var historyCard: View? = null
     private var tapCount = 0
     private var lastTapAt = 0L
@@ -190,35 +191,64 @@ class OverlayService : Service() {
     //   ダブルタップ … 録音開始 / 録音中はシングルタップで確定して挿入
     //   長押し（待機中）… フィードバック録音（結果は GitHub Issue へ）
     //   長押し（録音中）… キャンセル
+    /** 左右の端に1つずつゾーンを置く。どちらの手で持っていても親指が届く */
     private fun setupHotZone(overlayType: Int) {
         val zoneW = (density * ZONE_W_DP).toInt()
         val zoneH = (density * ZONE_H_DP).toInt()
-        val (savedX, savedY) = Prefs.getZonePos(this)
-        val zx = if (savedX >= 0) savedX else screenWidth - zoneW
-        val zy = if (savedY >= 0) savedY else (screenHeight / 2) - (zoneH / 2)
+        val centerY = (screenHeight / 2) - (zoneH / 2)
 
+        val (rx, ry) = Prefs.getZonePos(this)
+        val right = createZone(
+            overlayType,
+            if (rx >= 0) rx else screenWidth - zoneW,
+            if (ry >= 0) ry else centerY,
+            isLeft = false
+        )
+        hotZone = right.first
+        zoneParams = right.second
+
+        val (lx, ly) = Prefs.getZonePosLeft(this)
+        createZone(
+            overlayType,
+            if (lx >= 0) lx else 0,
+            if (ly >= 0) ly else centerY,
+            isLeft = true
+        )
+
+        // 起動直後の3秒だけ枠を見せる。見えない当たり判定は場所が分からないと使えない
+        zoneViews.forEach { it.setBackgroundResource(R.drawable.zone_edit) }
+        mainHandler.postDelayed({ updateZoneVisual() }, 3000)
+    }
+
+    private fun createZone(
+        overlayType: Int,
+        x: Int,
+        y: Int,
+        isLeft: Boolean
+    ): Pair<View, WindowManager.LayoutParams> {
         val params = WindowManager.LayoutParams(
-            zoneW, zoneH,
+            (density * ZONE_W_DP).toInt(), (density * ZONE_H_DP).toInt(),
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = zx
-            y = zy
+            this.x = x
+            this.y = y
         }
         val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
-        attachZoneTouchListener(view, params)
-        hotZone = view
-        zoneParams = params
+        attachZoneTouchListener(view, params, isLeft)
+        zoneViews.add(view)
         try { wm.addView(view, params) } catch (_: Exception) {}
-        // 起動直後の3秒だけ枠を見せる。見えない当たり判定は場所が分からないと使えない
-        view.setBackgroundResource(R.drawable.zone_edit)
-        mainHandler.postDelayed({ updateZoneVisual() }, 3000)
+        return view to params
     }
 
-    private fun attachZoneTouchListener(view: View, params: WindowManager.LayoutParams) {
+    private fun attachZoneTouchListener(
+        view: View,
+        params: WindowManager.LayoutParams,
+        isLeft: Boolean
+    ) {
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
         val zoneW = (density * ZONE_W_DP).toInt()
         val zoneH = (density * ZONE_H_DP).toInt()
@@ -295,7 +325,10 @@ class OverlayService : Service() {
                         }
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        if (dragged) Prefs.setZonePos(this, params.x, params.y)
+                        if (dragged) {
+                            if (isLeft) Prefs.setZonePosLeft(this, params.x, params.y)
+                            else Prefs.setZonePos(this, params.x, params.y)
+                        }
                     }
                 }
             }
@@ -306,17 +339,16 @@ class OverlayService : Service() {
 
     private fun enterZoneEditMode() {
         if (triggerMode != Prefs.TRIGGER_ZONE) return
-        val view = hotZone ?: return
+        if (zoneViews.isEmpty()) return
         zoneEditMode = true
-        view.setBackgroundResource(R.drawable.zone_edit)
-        Toast.makeText(this, "ドラッグで位置を決めて、ダブルタップで確定", Toast.LENGTH_LONG).show()
+        zoneViews.forEach { it.setBackgroundResource(R.drawable.zone_edit) }
+        Toast.makeText(this, "左右の枠をドラッグして位置を決め、ダブルタップで確定", Toast.LENGTH_LONG).show()
     }
 
     private fun exitZoneEditMode() {
-        val view = hotZone ?: return
+        if (zoneViews.isEmpty()) return
         zoneEditMode = false
-        view.background = null
-        zoneParams?.let { Prefs.setZonePos(this, it.x, it.y) }
+        zoneViews.forEach { it.background = null }
         Toast.makeText(this, "起動ゾーンの位置を保存した", Toast.LENGTH_SHORT).show()
     }
 
@@ -342,7 +374,8 @@ class OverlayService : Service() {
     private fun removeAllViews() {
         stopLevelMeter()
         hideHistoryCard()
-        hotZone?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
+        zoneViews.forEach { v -> try { wm.removeView(v) } catch (_: Exception) {} }
+        zoneViews.clear()
         hotZone = null
         zoneParams = null
         zoneEditMode = false
@@ -352,12 +385,13 @@ class OverlayService : Service() {
 
     /** 録音状態をゾーンの見た目に反映（待機中は完全に透明） */
     private fun updateZoneVisual() {
-        val view = hotZone ?: return
         if (zoneEditMode) return
-        when {
-            isRecording && isFeedback -> view.setBackgroundResource(R.drawable.zone_feedback)
-            isRecording -> view.setBackgroundResource(R.drawable.zone_recording)
-            else -> view.background = null
+        zoneViews.forEach { view ->
+            when {
+                isRecording && isFeedback -> view.setBackgroundResource(R.drawable.zone_feedback)
+                isRecording -> view.setBackgroundResource(R.drawable.zone_recording)
+                else -> view.background = null
+            }
         }
     }
 
@@ -641,12 +675,12 @@ class OverlayService : Service() {
     private val levelTick = object : Runnable {
         override fun run() {
             if (!isRecording) return
-            val view = hotZone
-            if (view != null && !zoneEditMode) {
+            if (zoneViews.isNotEmpty() && !zoneEditMode) {
                 // maxAmplitude(0-32767) を 0.45〜1.0 の濃さに割り当てる。
                 // 声を出している間だけドットが濃くなる＝拾えているのが目で分かる
                 val amp = (recorder?.amplitude() ?: 0).coerceIn(0, 12000) / 12000f
-                view.alpha = 0.45f + 0.55f * amp
+                val a = 0.45f + 0.55f * amp
+                zoneViews.forEach { it.alpha = a }
             }
             mainHandler.postDelayed(this, 100)
         }
@@ -659,14 +693,13 @@ class OverlayService : Service() {
 
     private fun stopLevelMeter() {
         mainHandler.removeCallbacks(levelTick)
-        hotZone?.alpha = 1f
+        zoneViews.forEach { it.alpha = 1f }
     }
 
     /** ダブルタップが当たった事を目でも分かるように一瞬光らせる */
     private fun flashZone() {
-        val view = hotZone ?: return
-        if (zoneEditMode) return
-        view.setBackgroundColor(Color.parseColor("#55F0C040"))
+        if (zoneEditMode || zoneViews.isEmpty()) return
+        zoneViews.forEach { it.setBackgroundColor(Color.parseColor("#55F0C040")) }
         mainHandler.postDelayed({ updateZoneVisual() }, 160)
     }
 
@@ -695,17 +728,18 @@ class OverlayService : Service() {
         val edgeMargin = (density * 20).toInt()
         val tabH = (density * 70).toInt()
 
-        val zone = hotZone
-        val zp = zoneParams
-        if (zone != null && zp != null) {
+        if (zoneViews.isNotEmpty()) {
             // 透明ゾーンは画面比率を保って再配置（縦横の切り替えで画面外に消えないように）
             val zoneW = (density * ZONE_W_DP).toInt()
             val zoneH = (density * ZONE_H_DP).toInt()
-            val xRatio = if (screenWidth > 0) zp.x.toFloat() / screenWidth else 1f
-            val yRatio = if (screenHeight > 0) zp.y.toFloat() / screenHeight else 0.5f
-            zp.x = (newWidth * xRatio).toInt().coerceIn(0, maxOf(0, newWidth - zoneW))
-            zp.y = (newHeight * yRatio).toInt().coerceIn(0, maxOf(0, newHeight - zoneH))
-            try { wm.updateViewLayout(zone, zp) } catch (_: Exception) {}
+            for (zone in zoneViews) {
+                val zp = zone.layoutParams as? WindowManager.LayoutParams ?: continue
+                val xRatio = if (screenWidth > 0) zp.x.toFloat() / screenWidth else 1f
+                val yRatio = if (screenHeight > 0) zp.y.toFloat() / screenHeight else 0.5f
+                zp.x = (newWidth * xRatio).toInt().coerceIn(0, maxOf(0, newWidth - zoneW))
+                zp.y = (newHeight * yRatio).toInt().coerceIn(0, maxOf(0, newHeight - zoneH))
+                try { wm.updateViewLayout(zone, zp) } catch (_: Exception) {}
+            }
             screenWidth = newWidth
             screenHeight = newHeight
             return
