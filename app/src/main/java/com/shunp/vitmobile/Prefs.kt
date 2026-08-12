@@ -17,6 +17,7 @@ object Prefs {
     private const val KEY_TRIGGER = "trigger_mode"
     private const val KEY_GITHUB_TOKEN = "github_token"
     private const val KEY_VOLUME_TRIGGER = "volume_trigger"
+    private const val KEY_DTAP_MS = "double_tap_ms"
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
     const val TRIGGER_ZONE = "zone"
@@ -43,6 +44,19 @@ object Prefs {
     fun setVolumeTrigger(ctx: Context, on: Boolean) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_VOLUME_TRIGGER, on).apply()
+    }
+
+    /**
+     * ダブルタップとみなす間隔（ミリ秒）。短いほど誤爆しない。
+     * スクロールの指下ろしは間隔が空くので、ここを詰めるのが一番効く。
+     */
+    fun getDoubleTapMs(ctx: Context): Int =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_DTAP_MS, 140)
+
+    fun setDoubleTapMs(ctx: Context, ms: Int) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_DTAP_MS, ms).apply()
     }
 
     fun getGithubToken(ctx: Context): String? =

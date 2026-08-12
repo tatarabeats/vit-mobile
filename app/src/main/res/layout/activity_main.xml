@@ -189,6 +189,30 @@
             android:textColor="#FFFFFFFF"
             android:textSize="15sp" />
 
+        <TextView
+            android:id="@+id/dtapLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="ダブルタップの判定: 140ms"
+            android:textColor="#FFFFFFFF"
+            android:textSize="15sp" />
+
+        <SeekBar
+            android:id="@+id/dtapSeek"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="200"
+            android:progress="40" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="短いほど誤爆しない（100〜300ms）。反応しない時だけ右へ"
+            android:textColor="#CCFFFFFF"
+            android:textSize="13sp"
+            android:paddingBottom="6dp" />
+
         <Button
             android:id="@+id/btnEditZone"
             android:layout_width="match_parent"

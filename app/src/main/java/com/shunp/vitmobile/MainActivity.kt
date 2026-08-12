@@ -76,6 +76,19 @@ class MainActivity : AppCompatActivity() {
             ).show()
         }
 
+        // ダブルタップ判定の詰め幅（100〜300ms）。誤爆が続くならここを短くする
+        b.dtapSeek.progress = (Prefs.getDoubleTapMs(this) - 100).coerceIn(0, 200)
+        b.dtapLabel.text = "ダブルタップの判定: ${Prefs.getDoubleTapMs(this)}ms"
+        b.dtapSeek.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar?, v: Int, fromUser: Boolean) {
+                b.dtapLabel.text = "ダブルタップの判定: ${v + 100}ms"
+            }
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {
+                Prefs.setDoubleTapMs(this@MainActivity, (sb?.progress ?: 40) + 100)
+            }
+        })
+
         b.btnEditZone.setOnClickListener {
             if (Prefs.getTriggerMode(this) != Prefs.TRIGGER_ZONE) {
                 Toast.makeText(this, "起動ゾーンをONにしてから確認してください", Toast.LENGTH_SHORT).show()

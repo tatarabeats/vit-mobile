@@ -259,7 +259,7 @@ class OverlayService : Service() {
             coordsBlind = true
             if (InputAccessibilityService.imeTop() >= 0) return
             val nowBlind = System.currentTimeMillis()
-            val quickBlind = nowBlind - lastTapAt < 220
+            val quickBlind = nowBlind - lastTapAt < Prefs.getDoubleTapMs(this)
             lastTapAt = nowBlind
             if (!quickBlind) { tapCount = 0; onEdgeTap(reset = true) } else onEdgeTap(reset = false)
             return
@@ -275,11 +275,12 @@ class OverlayService : Service() {
         if (imeTop in 0..screenHeight && y >= imeTop) return
 
         // スワイプの連打で誤爆しないよう、2打目は「同じ場所・素早く」を要求する。
-        // 本物のダブルタップはほぼ同じ点を220ms以内に叩く。スクロールの指下ろしは
-        // 位置が離れるか間隔が空くので、ここで弾ける（2026-08-12 実使用で更に短縮）。
+        // 本物のダブルタップはほぼ同じ点を素早く叩く。スクロールの指下ろしは
+        // 位置が離れるか間隔が空くので、ここで弾ける。
+        // 判定時間は設定で詰められる（既定140ms・2026-08-12 実使用で短縮）。
         val now = System.currentTimeMillis()
         val near = abs(x - lastTapX) < density * 30 && abs(y - lastTapY) < density * 30
-        val quick = now - lastTapAt < 220
+        val quick = now - lastTapAt < Prefs.getDoubleTapMs(this)
         lastTapX = x
         lastTapY = y
         if (!quick || !near) {
