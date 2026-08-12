@@ -66,17 +66,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        b.zonePassiveSwitch.isChecked = Prefs.isZonePassive(this)
+        b.zonePassiveSwitch.isChecked = Prefs.isVolumeTrigger(this)
         b.zonePassiveSwitch.setOnCheckedChangeListener { _, checked ->
-            Prefs.setZonePassive(this, checked)
-            if (isOverlayRunning()) {
-                // サービスを入れ直して方式を切り替える
-                stopService(Intent(this, OverlayService::class.java))
-                startForegroundService(Intent(this, OverlayService::class.java))
-            }
+            Prefs.setVolumeTrigger(this, checked)
             Toast.makeText(
                 this,
-                if (checked) "キワのタップを奪わない方式にした" else "帯を占有する確実方式にした",
+                if (checked) "音量キー2回押しでも起動する" else "音量キー2回押しをやめた",
                 Toast.LENGTH_SHORT
             ).show()
         }

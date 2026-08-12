@@ -185,7 +185,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="キワのタッチを奪わない（スクロールも普通のタップもそのまま通す）"
+            android:text="音量キー2回押しでも起動する（画面のダブルタップが効かない時の保険）"
             android:textColor="#FFFFFFFF"
             android:textSize="15sp" />
 

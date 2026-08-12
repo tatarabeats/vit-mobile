@@ -35,6 +35,8 @@ class OverlayService : Service() {
         const val ACTION_EDIT_ZONE = "com.shunp.vitmobile.EDIT_ZONE"
         /** 起動方法の設定が変わった時に呼ぶ（オーバーレイを作り直す） */
         const val ACTION_RELOAD_TRIGGER = "com.shunp.vitmobile.RELOAD_TRIGGER"
+        /** 音量キー2回押しなど、画面外からの起動 */
+        const val ACTION_TRIGGER = "com.shunp.vitmobile.TRIGGER"
 
         /**
           * 左右のキワの帯の幅。タッチを横取りしないので、広めに取っても下のアプリに影響しない。
@@ -90,6 +92,7 @@ class OverlayService : Service() {
         when (intent?.action) {
             ACTION_EDIT_ZONE -> enterZoneEditMode()
             ACTION_RELOAD_TRIGGER -> reloadTrigger()
+            ACTION_TRIGGER -> onExternalTrigger()
         }
         return START_STICKY
     }
@@ -200,15 +203,15 @@ class OverlayService : Service() {
     //
     // **タッチは一切横取りしない**（2026-08-12 の作り直し）。
     // 帯に触れる窓を置くと、そこから始まるスクロールも普通のタップも死ぬ。
-    // 代わりに「画面中央を覆う *触れない* 監視窓」を置き、その窓の外＝左右のキワに
-    // 指が降りた事実だけを FLAG_WATCH_OUTSIDE_TOUCH の ACTION_OUTSIDE で受け取る。
+    // 代わりに 1×1px の監視窓を置き、画面のどこに指が降りたかを
+    // FLAG_WATCH_OUTSIDE_TOUCH の ACTION_OUTSIDE の座標で受け取る。
     // ACTION_OUTSIDE はイベントを消費しないので、下のアプリの操作は完全に無傷。
     //
     //   2回タップ … 録音開始   3回タップ … 履歴   4回タップ … フィードバック録音
-    //   録音中のタップ … 確定して挿入 / 録音中の長押し … キャンセル
-    //     （録音中だけは帯を実体化する。この数秒は下のアプリを触らないため）
+    //   録音中のタップ … 確定して挿入 / 録音中の2回タップ … キャンセル
+    //   帯そのものは常に FLAG_NOT_TOUCHABLE。見せるだけで、触れる窓は一切置かない
     private fun setupHotZone(overlayType: Int) {
-        if (Prefs.isZonePassive(this)) setupWatcher(overlayType)
+        setupWatcher(overlayType)
         showZoneHint(overlayType, 3000)
     }
 
@@ -249,14 +252,11 @@ class OverlayService : Service() {
     private fun onOutsideTouch(x: Float, y: Float) {
         if (x == 0f && y == 0f) {
             zeroCoordCount++
-            if (zeroCoordCount >= 3) {
-                Prefs.setZonePassive(this, false)
-                Toast.makeText(
-                    this,
-                    "この端末では座標が取れないので、キワを占有する方式に切り替えた",
-                    Toast.LENGTH_LONG
-                ).show()
-                mainHandler.post { switchToOccupyMode() }
+            if (zeroCoordCount >= 3 && !Prefs.isVolumeTrigger(this)) {
+                // 画面のタッチは絶対に奪わない。座標が取れない端末では
+                // 音量キー2回押しへ逃がす（画面には一切触らない）
+                Prefs.setVolumeTrigger(this, true)
+                flashStatus("音量キー2回押しで起動に切り替えた")
             }
             return
         }
@@ -287,19 +287,16 @@ class OverlayService : Service() {
         onEdgeTap(reset = false)
     }
 
-    private fun switchToOccupyMode() {
-        watcherView?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
-        watcherView = null
-        detachStrips()
-        attachStrips(touchable = true)
-    }
-
     /**
      * キワに指が降りた。回数で意味を分ける。
      * 遅延なしで進めたいので「2回目で即開始し、3回目で取り消して履歴」という積み上げにする。
      */
+    /** 音量キー2回押しなどからの起動。押すたびに開始 → 確定 のトグル */
+    private fun onExternalTrigger() {
+        if (isRecording) stopRecording() else startRecording(feedback = false)
+    }
+
     private fun onEdgeTap(reset: Boolean) {
-        if (stripsAttached) return  // 録音中は帯側で拾うので二重に数えない
         tapCount = if (reset) 1 else tapCount + 1
         if (isRecording) {
             // 録音中: 1回=確定 / 2回=キャンセル。1回目は2打目が来ないと確定できないので少し待つ
@@ -353,15 +350,17 @@ class OverlayService : Service() {
             @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
 
     /** 録音中だけ帯を触れる状態で出す（確定タップ・キャンセル長押しを確実に拾うため） */
-    private fun attachStrips(touchable: Boolean) {
+    /**
+     * 帯は **常に FLAG_NOT_TOUCHABLE**（見せるだけ）。
+     * 触れる帯を置くと端でのスクロールが死ぬ。v0.7.x で実際にそうなった。二度とやらない。
+     */
+    private fun attachStrips(touchable: Boolean = false) {
         if (stripsAttached) return
         val type = overlayType()
         for (left in listOf(true, false)) {
             val params = stripParams(type, left)
-            if (!touchable) params.flags = params.flags or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
             val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
-            if (touchable) attachZoneTouchListener(view)
             zoneViews.add(view)
             if (!left) { hotZone = view; zoneParams = params }
             try { wm.addView(view, params) } catch (_: Exception) {}
@@ -372,7 +371,7 @@ class OverlayService : Service() {
 
     /** タッチを横取りしない方式では、録音が終わったら帯を消して完全に無干渉へ戻す */
     private fun releaseStripsIfPassive() {
-        if (Prefs.isZonePassive(this) && !zoneEditMode) detachStrips()
+        if (!zoneEditMode) detachStrips()
     }
 
     private fun detachStrips() {
@@ -386,12 +385,24 @@ class OverlayService : Service() {
     /** 帯の場所を一定時間だけ見せる（触れない状態で出すので操作は邪魔しない） */
     private fun showZoneHint(overlayType: Int, ms: Long) {
         if (stripsAttached) return
-        attachStrips(touchable = !Prefs.isZonePassive(this))
+        attachStrips()
         zoneEditMode = true
         zoneViews.forEach { it.setBackgroundResource(R.drawable.zone_edit) }
         mainHandler.postDelayed({
             zoneEditMode = false
-            if (Prefs.isZonePassive(this) && !isRecording) detachStrips() else updateZoneVisual()
+            if (!isRecording) detachStrips() else updateZoneVisual()
+        }, ms)
+    }
+
+    /** 帯の場所を一定時間だけ見せる（触れない状態で出すので操作は邪魔しない） */
+    private fun showZoneHint(overlayType: Int, ms: Long) {
+        if (stripsAttached) return
+        attachStrips()
+        zoneEditMode = true
+        zoneViews.forEach { it.setBackgroundResource(R.drawable.zone_edit) }
+        mainHandler.postDelayed({
+            zoneEditMode = false
+            if (!isRecording) detachStrips() else updateZoneVisual()
         }, ms)
     }
 
@@ -643,12 +654,7 @@ class OverlayService : Service() {
             micButton.imageTintList = ColorStateList.valueOf(navy)
             updateZoneVisual()
             startLevelMeter()
-            if (Prefs.isZonePassive(this) && triggerMode == Prefs.TRIGGER_ZONE) {
-                // 3回目・4回目のタップは監視窓側で拾いたいので、少し置いてから実体化する
-                mainHandler.postDelayed({
-                    if (isRecording) attachStrips(touchable = true)
-                }, 600)
-            }
+            if (triggerMode == Prefs.TRIGGER_ZONE) attachStrips()
             buzz(40)
             showStatus(if (feedback) "フィードバック録音中 — タップで送信" else "録音中 — タップで確定", feedback)
         }

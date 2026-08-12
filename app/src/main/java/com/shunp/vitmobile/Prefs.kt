@@ -16,7 +16,7 @@ object Prefs {
     private const val MAX_HISTORY = 50
     private const val KEY_TRIGGER = "trigger_mode"
     private const val KEY_GITHUB_TOKEN = "github_token"
-    private const val KEY_ZONE_PASSIVE = "zone_passive"
+    private const val KEY_VOLUME_TRIGGER = "volume_trigger"
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
     const val TRIGGER_ZONE = "zone"
@@ -32,18 +32,17 @@ object Prefs {
     }
 
     /**
-     * true（既定）= キワのタッチを一切横取りしない方式。
-     * 中央を覆う触れない窓の ACTION_OUTSIDE でキワのタップだけ検知する。
-     * スクロールも普通のタップも下のアプリにそのまま流れる。
-     * 端末側でこの通知が来ない場合に備えて、帯を占有する確実方式に切り替えられるようにしてある。
+     * 音量キー2回押しでも起動するか。
+     * ACTION_OUTSIDE の座標が取れない端末（Android 12+ の制限）向けの逃げ道。
+     * 画面のタッチは絶対に奪わないと決めたので、占有方式は持たない。
      */
-    fun isZonePassive(ctx: Context): Boolean =
+    fun isVolumeTrigger(ctx: Context): Boolean =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_ZONE_PASSIVE, true)
+            .getBoolean(KEY_VOLUME_TRIGGER, false)
 
-    fun setZonePassive(ctx: Context, passive: Boolean) {
+    fun setVolumeTrigger(ctx: Context, on: Boolean) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_ZONE_PASSIVE, passive).apply()
+            .edit().putBoolean(KEY_VOLUME_TRIGGER, on).apply()
     }
 
     fun getGithubToken(ctx: Context): String? =

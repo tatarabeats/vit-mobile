@@ -122,6 +122,33 @@ class InputAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
+    private var lastVolKeyAt = 0L
+
+    /**
+     * 音量ダウン2回押しでも録音を起動できるようにする（設定でONの時だけ）。
+     * 画面のタッチは絶対に奪わない方針なので、ダブルタップが効かない端末の逃げ道はここ。
+     * イベントは消費しない（false を返す）ので、音量そのものは普通に変わる。
+     */
+    override fun onKeyEvent(event: android.view.KeyEvent?): Boolean {
+        val e = event ?: return false
+        if (!Prefs.isVolumeTrigger(this)) return false
+        if (e.action != android.view.KeyEvent.ACTION_DOWN) return false
+        if (e.keyCode != android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return false
+        val now = System.currentTimeMillis()
+        if (now - lastVolKeyAt in 1..450) {
+            lastVolKeyAt = 0
+            try {
+                startForegroundService(
+                    Intent(this, OverlayService::class.java)
+                        .setAction(OverlayService.ACTION_TRIGGER)
+                )
+            } catch (_: Exception) {}
+        } else {
+            lastVolKeyAt = now
+        }
+        return false
+    }
+
     private fun pasteOrSetText(providedText: String?) {
         Log.d(TAG, "=== pasteOrSetText text=${providedText?.take(30)} ===")
         val node = findFocusedNode() ?: findInputNodeInTree() ?: findByLastBounds()
