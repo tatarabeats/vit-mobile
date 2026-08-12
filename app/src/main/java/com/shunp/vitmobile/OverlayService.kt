@@ -47,6 +47,9 @@ class OverlayService : Service() {
     private lateinit var tabParams: WindowManager.LayoutParams
     private var hotZone: View? = null
     private var zoneParams: WindowManager.LayoutParams? = null
+    private var historyCard: View? = null
+    private var tapCount = 0
+    private var lastTapAt = 0L
     private var zoneEditMode = false
     private var isFeedback = false
     private var triggerMode = Prefs.TRIGGER_ZONE
@@ -260,6 +263,18 @@ class OverlayService : Service() {
         })
 
         view.setOnTouchListener { _, ev ->
+            // 3回タップ = 履歴。2打目で始まった録音を取り消して直近5件を出す
+            if (!zoneEditMode && ev.action == MotionEvent.ACTION_DOWN) {
+                val now = System.currentTimeMillis()
+                tapCount = if (now - lastTapAt < 450) tapCount + 1 else 1
+                lastTapAt = now
+                if (tapCount >= 3) {
+                    tapCount = 0
+                    if (isRecording) cancelRecording()
+                    showHistoryCard()
+                    return@setOnTouchListener true
+                }
+            }
             if (zoneEditMode) {
                 when (ev.action) {
                     MotionEvent.ACTION_DOWN -> {
@@ -325,6 +340,8 @@ class OverlayService : Service() {
     }
 
     private fun removeAllViews() {
+        stopLevelMeter()
+        hideHistoryCard()
         hotZone?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
         hotZone = null
         zoneParams = null
@@ -499,6 +516,7 @@ class OverlayService : Service() {
             micButton.setBackgroundResource(R.drawable.mic_button_recording)
             micButton.imageTintList = ColorStateList.valueOf(navy)
             updateZoneVisual()
+            startLevelMeter()
             buzz(40)
             if (!feedback) toast("● 録音中 — タップで確定")
         }
@@ -510,6 +528,7 @@ class OverlayService : Service() {
         isFeedback = false
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
+        stopLevelMeter()
         updateZoneVisual()
         buzz(20, 60, 20)
         toast(if (wasFeedback) "フィードバック送信中…" else "変換中…")
@@ -524,6 +543,7 @@ class OverlayService : Service() {
         isFeedback = false
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
+        stopLevelMeter()
         updateZoneVisual()
         buzz(120)
         recorder?.cancel()
@@ -549,6 +569,97 @@ class OverlayService : Service() {
                 vib.vibrate(android.os.VibrationEffect.createWaveform(pattern, -1))
             }
         } catch (_: Exception) {}
+    }
+
+    // ==================== 履歴カード（3回タップ） ====================
+
+    private fun showHistoryCard() {
+        hideHistoryCard()
+        val items = Prefs.getHistory(this).take(5)
+        if (items.isEmpty()) { toast("履歴はまだ無い"); return }
+
+        val pad = (density * 14).toInt()
+        val card = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.history_card_bg)
+            setPadding(pad, pad, pad, pad)
+        }
+        for ((_, text) in items) {
+            val row = android.widget.TextView(this).apply {
+                this.text = if (text.length > 60) text.take(60) + "…" else text
+                setTextColor(Color.WHITE)
+                textSize = 15f
+                setPadding(pad / 2, pad / 2, pad / 2, pad / 2)
+                setOnClickListener {
+                    hideHistoryCard()
+                    copyAndPaste(text)
+                    buzz(30)
+                }
+            }
+            card.addView(row)
+        }
+        val close = android.widget.TextView(this).apply {
+            this.text = "閉じる"
+            setTextColor(gold)
+            textSize = 14f
+            setPadding(pad / 2, pad, pad / 2, pad / 2)
+            setOnClickListener { hideHistoryCard() }
+        }
+        card.addView(close)
+
+        val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        else
+            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+        val cardW = minOf((density * 300).toInt(), screenWidth - (density * 24).toInt())
+        val zp = zoneParams
+        // 入力欄のフォーカスを奪わないよう NOT_FOCUSABLE のまま出す（挿入先が変わらない）
+        val params = WindowManager.LayoutParams(
+            cardW, WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = ((zp?.x ?: screenWidth) - cardW).coerceIn(0, maxOf(0, screenWidth - cardW))
+            y = (zp?.y ?: (screenHeight / 2)).coerceIn(0, maxOf(0, screenHeight - (density * 200).toInt()))
+        }
+        historyCard = card
+        try { wm.addView(card, params) } catch (_: Exception) { historyCard = null }
+        // 放置されても邪魔にならないよう自動で消す
+        mainHandler.postDelayed({ hideHistoryCard() }, 8000)
+    }
+
+    private fun hideHistoryCard() {
+        historyCard?.let { c -> try { wm.removeView(c) } catch (_: Exception) {} }
+        historyCard = null
+    }
+
+    // ==================== 録音中の音量表示 ====================
+
+    private val levelTick = object : Runnable {
+        override fun run() {
+            if (!isRecording) return
+            val view = hotZone
+            if (view != null && !zoneEditMode) {
+                // maxAmplitude(0-32767) を 0.45〜1.0 の濃さに割り当てる。
+                // 声を出している間だけドットが濃くなる＝拾えているのが目で分かる
+                val amp = (recorder?.amplitude() ?: 0).coerceIn(0, 12000) / 12000f
+                view.alpha = 0.45f + 0.55f * amp
+            }
+            mainHandler.postDelayed(this, 100)
+        }
+    }
+
+    private fun startLevelMeter() {
+        mainHandler.removeCallbacks(levelTick)
+        mainHandler.postDelayed(levelTick, 100)
+    }
+
+    private fun stopLevelMeter() {
+        mainHandler.removeCallbacks(levelTick)
+        hotZone?.alpha = 1f
     }
 
     /** ダブルタップが当たった事を目でも分かるように一瞬光らせる */

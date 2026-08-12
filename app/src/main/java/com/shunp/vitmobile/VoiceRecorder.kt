@@ -61,6 +61,9 @@ class VoiceRecorder(private val ctx: Context) {
         }
     }
 
+    /** 録音中の音量（0-32767）。0 は無音か録音していない */
+    fun amplitude(): Int = try { recorder?.maxAmplitude ?: 0 } catch (_: Exception) { 0 }
+
     /** 録音中止（送信せずファイル削除） */
     fun cancel() {
         try { recorder?.stop() } catch (_: Exception) {}
