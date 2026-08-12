@@ -176,7 +176,7 @@
             android:id="@+id/zoneModeSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="透明ゾーンをダブルタップで起動（画面に何も出さない）"
+            android:text="画面のキワをダブルタップで起動（何も表示しない）"
             android:textColor="#FFFFFFFF"
             android:textSize="15sp" />
 
@@ -185,7 +185,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="起動ゾーンの位置を調整"
+            android:text="起動ゾーンの場所を確認（5秒だけ表示）"
             android:textColor="#FF0A0E1A"
             android:backgroundTint="#FFF0C040" />
 
@@ -196,7 +196,7 @@
             android:textSize="13sp"
             android:textColor="#CCFFFFFF"
             android:lineSpacingExtra="4dp"
-            android:text="ゾーン操作:\n・ダブルタップ → 録音開始\n・録音中にタップ → 確定して挿入\n・録音中に長押し → キャンセル\n・待機中に長押し → フィードバック録音" />
+            android:text="画面の左右のキワ（縦の帯）なら、どこでも同じ:\n・ダブルタップ → 録音開始\n・録音中にタップ → 確定して挿入\n・3回タップ → 履歴（枠外タップで閉じる）\n・録音中に長押し → キャンセル\n・待機中に長押し → フィードバック録音" />
 
         <TextView
             android:layout_width="match_parent"

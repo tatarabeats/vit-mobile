@@ -26,6 +26,31 @@ class InputAccessibilityService : AccessibilityService() {
         var lastFocusedPackage: String? = null
         @Volatile
         var lastFocusedClass: String? = null
+
+        /** 起動ゾーンから「素通しタップ」を頼むために保持する */
+        @Volatile
+        var instance: InputAccessibilityService? = null
+
+        /**
+         * 画面のキワに置いた起動ゾーンは、そこへの普通のタップを飲み込んでしまう。
+         * ダブルタップでなかった時は、同じ座標のタップを下のアプリへ流し直す。
+         * 呼ぶ側でゾーンを一時的に touch 不可にしてから呼ぶこと（でないと自分で拾い直す）。
+         */
+        fun passThroughTap(x: Float, y: Float): Boolean {
+            val svc = instance ?: return false
+            return try {
+                val path = android.graphics.Path().apply { moveTo(x, y) }
+                val stroke = android.accessibilityservice.GestureDescription
+                    .StrokeDescription(path, 0, 40)
+                svc.dispatchGesture(
+                    android.accessibilityservice.GestureDescription.Builder()
+                        .addStroke(stroke).build(),
+                    null, null
+                )
+            } catch (_: Exception) {
+                false
+            }
+        }
     }
 
     private val receiver = object : BroadcastReceiver() {
@@ -46,11 +71,13 @@ class InputAccessibilityService : AccessibilityService() {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(receiver, filter)
         }
+        instance = this
         Log.d(TAG, "service connected")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         try { unregisterReceiver(receiver) } catch (_: Exception) {}
+        instance = null
         return super.onUnbind(intent)
     }
 

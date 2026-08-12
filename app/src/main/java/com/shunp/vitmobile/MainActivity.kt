@@ -68,7 +68,7 @@ class MainActivity : AppCompatActivity() {
 
         b.btnEditZone.setOnClickListener {
             if (Prefs.getTriggerMode(this) != Prefs.TRIGGER_ZONE) {
-                Toast.makeText(this, "透明ゾーンをONにしてから調整してください", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "起動ゾーンをONにしてから確認してください", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             if (!isOverlayRunning()) {
@@ -79,7 +79,6 @@ class MainActivity : AppCompatActivity() {
                 Intent(this, OverlayService::class.java)
                     .setAction(OverlayService.ACTION_EDIT_ZONE)
             )
-            Toast.makeText(this, "ドラッグで位置を決めて、ダブルタップで確定", Toast.LENGTH_LONG).show()
             moveTaskToBack(true)
         }
 

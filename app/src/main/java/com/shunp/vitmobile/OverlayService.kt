@@ -36,8 +36,18 @@ class OverlayService : Service() {
         /** 起動方法の設定が変わった時に呼ぶ（オーバーレイを作り直す） */
         const val ACTION_RELOAD_TRIGGER = "com.shunp.vitmobile.RELOAD_TRIGGER"
 
-        val ZONE_W_DP = 44
-        val ZONE_H_DP = 150
+        /** 帯の幅。狭いほど下のアプリを邪魔しない */
+        const val EDGE_W_DP = 26
+
+        /**
+         * 最端から内側へ空ける幅。ここを空けないと **戻るジェスチャー**（端からのスワイプ）を
+         * 飲み込んでしまう。OSの戻り判定はおよそ端から20dp なので、その外へ出す。
+         */
+        const val EDGE_INSET_DP = 22
+
+        /** 上下に空ける量。ステータスバーの引き下ろしとナビゲーションバーを avoid */
+        const val EDGE_TOP_DP = 96
+        const val EDGE_BOTTOM_DP = 160
     }
 
     private lateinit var wm: WindowManager
@@ -185,37 +195,26 @@ class OverlayService : Service() {
         }
     }
 
-    // ==================== 透明ゾーン（既定の起動方法） ====================
-    // 画面に何も見えない小さな当たり判定を1つ置き、そこを **ダブルタップ** した時だけ録音を始める。
-    // 常時表示のバーが目障りという問題への対処（2026-08-12）。
+    // ==================== 起動ゾーン（既定の起動方法） ====================
+    // 画面の左右のキワに、見えない縦帯を1本ずつ置く。**そのどこをダブルタップしても**録音が始まる。
+    // 「特定の1点」だと場所を覚えていないと使えないため、キワ全体に広げた（2026-08-12）。
     //   ダブルタップ … 録音開始 / 録音中はシングルタップで確定して挿入
-    //   長押し（待機中）… フィードバック録音（結果は GitHub Issue へ）
-    //   長押し（録音中）… キャンセル
-    /** 左右の端に1つずつゾーンを置く。どちらの手で持っていても親指が届く */
+    //   3回タップ … 履歴
+    //   長押し（待機中）… フィードバック録音 / 長押し（録音中）… キャンセル
+    //   待機中のシングルタップ … 下のアプリへ素通し（キワの普通のタップを殺さないため）
     private fun setupHotZone(overlayType: Int) {
-        val zoneW = (density * ZONE_W_DP).toInt()
-        val zoneH = (density * ZONE_H_DP).toInt()
-        val centerY = (screenHeight / 2) - (zoneH / 2)
+        val w = (density * EDGE_W_DP).toInt()
+        val inset = (density * EDGE_INSET_DP).toInt()
+        val top = (density * EDGE_TOP_DP).toInt()
+        val bottom = (density * EDGE_BOTTOM_DP).toInt()
+        val h = maxOf((density * 120).toInt(), screenHeight - top - bottom)
 
-        val (rx, ry) = Prefs.getZonePos(this)
-        val right = createZone(
-            overlayType,
-            if (rx >= 0) rx else screenWidth - zoneW,
-            if (ry >= 0) ry else centerY,
-            isLeft = false
-        )
+        val right = createZone(overlayType, screenWidth - inset - w, top, w, h)
         hotZone = right.first
         zoneParams = right.second
+        createZone(overlayType, inset, top, w, h)
 
-        val (lx, ly) = Prefs.getZonePosLeft(this)
-        createZone(
-            overlayType,
-            if (lx >= 0) lx else 0,
-            if (ly >= 0) ly else centerY,
-            isLeft = true
-        )
-
-        // 起動直後の3秒だけ枠を見せる。見えない当たり判定は場所が分からないと使えない
+        // 起動直後の3秒だけ帯を見せる。見えない当たり判定は場所が分からないと使えない
         zoneViews.forEach { it.setBackgroundResource(R.drawable.zone_edit) }
         mainHandler.postDelayed({ updateZoneVisual() }, 3000)
     }
@@ -224,10 +223,11 @@ class OverlayService : Service() {
         overlayType: Int,
         x: Int,
         y: Int,
-        isLeft: Boolean
+        w: Int,
+        h: Int
     ): Pair<View, WindowManager.LayoutParams> {
         val params = WindowManager.LayoutParams(
-            (density * ZONE_W_DP).toInt(), (density * ZONE_H_DP).toInt(),
+            w, h,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
@@ -238,26 +238,36 @@ class OverlayService : Service() {
             this.y = y
         }
         val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
-        attachZoneTouchListener(view, params, isLeft)
+        attachZoneTouchListener(view)
         zoneViews.add(view)
         try { wm.addView(view, params) } catch (_: Exception) {}
         return view to params
     }
 
-    private fun attachZoneTouchListener(
-        view: View,
-        params: WindowManager.LayoutParams,
-        isLeft: Boolean
-    ) {
-        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
-        val zoneW = (density * ZONE_W_DP).toInt()
-        val zoneH = (density * ZONE_H_DP).toInt()
-        var initialX = 0
-        var initialY = 0
-        var touchStartX = 0f
-        var touchStartY = 0f
-        var dragged = false
+    /**
+     * 待機中の1回タップを、下のアプリへそのまま流す。
+     * 帯を触れなくしてからユーザー補助でタップを打ち直し、150ms後に元に戻す
+     * （触れるままだと自分で拾い直して無限に跳ね返る）。
+     */
+    private fun passThroughTap(x: Float, y: Float) {
+        setZonesTouchable(false)
+        val ok = InputAccessibilityService.passThroughTap(x, y)
+        mainHandler.postDelayed({ setZonesTouchable(true) }, if (ok) 200 else 0)
+    }
 
+    private fun setZonesTouchable(touchable: Boolean) {
+        for (view in zoneViews) {
+            val p = view.layoutParams as? WindowManager.LayoutParams ?: continue
+            p.flags = if (touchable) {
+                p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+            } else {
+                p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            }
+            try { wm.updateViewLayout(view, p) } catch (_: Exception) {}
+        }
+    }
+
+    private fun attachZoneTouchListener(view: View) {
         val detector = android.view.GestureDetector(this, object :
             android.view.GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean = true
@@ -273,6 +283,7 @@ class OverlayService : Service() {
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 if (zoneEditMode) return true
                 if (isRecording) stopRecording()
+                else passThroughTap(e.rawX, e.rawY)
                 return true
             }
 
@@ -305,51 +316,25 @@ class OverlayService : Service() {
                     return@setOnTouchListener true
                 }
             }
-            if (zoneEditMode) {
-                when (ev.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        initialX = params.x
-                        initialY = params.y
-                        touchStartX = ev.rawX
-                        touchStartY = ev.rawY
-                        dragged = false
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = (ev.rawX - touchStartX).toInt()
-                        val dy = (ev.rawY - touchStartY).toInt()
-                        if (abs(dx) > touchSlop || abs(dy) > touchSlop) dragged = true
-                        if (dragged) {
-                            params.x = (initialX + dx).coerceIn(0, maxOf(0, screenWidth - zoneW))
-                            params.y = (initialY + dy).coerceIn(0, maxOf(0, screenHeight - zoneH))
-                            try { wm.updateViewLayout(view, params) } catch (_: Exception) {}
-                        }
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        if (dragged) {
-                            if (isLeft) Prefs.setZonePosLeft(this, params.x, params.y)
-                            else Prefs.setZonePos(this, params.x, params.y)
-                        }
-                    }
-                }
-            }
             detector.onTouchEvent(ev)
             true
         }
     }
 
+    /** 帯がどこにあるかを5秒だけ見せる（位置は左右のキワで固定なので、確認だけ） */
     private fun enterZoneEditMode() {
         if (triggerMode != Prefs.TRIGGER_ZONE) return
         if (zoneViews.isEmpty()) return
         zoneEditMode = true
         zoneViews.forEach { it.setBackgroundResource(R.drawable.zone_edit) }
-        Toast.makeText(this, "左右の枠をドラッグして位置を決め、ダブルタップで確定", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "この帯の中ならどこでもダブルタップで起動する", Toast.LENGTH_LONG).show()
+        mainHandler.postDelayed({ exitZoneEditMode() }, 5000)
     }
 
     private fun exitZoneEditMode() {
-        if (zoneViews.isEmpty()) return
+        if (zoneViews.isEmpty() || !zoneEditMode) return
         zoneEditMode = false
-        zoneViews.forEach { it.background = null }
-        Toast.makeText(this, "起動ゾーンの位置を保存した", Toast.LENGTH_SHORT).show()
+        updateZoneVisual()
     }
 
     /** 起動方法の設定変更を反映（バー ⇔ 透明ゾーン） */
@@ -632,14 +617,11 @@ class OverlayService : Service() {
             }
             card.addView(row)
         }
-        val close = android.widget.TextView(this).apply {
-            this.text = "閉じる"
-            setTextColor(gold)
-            textSize = 14f
-            setPadding(pad / 2, pad, pad / 2, pad / 2)
-            setOnClickListener { hideHistoryCard() }
+        // カードの外を触ったら閉じる（閉じるボタンを押させない）。
+        // FLAG_WATCH_OUTSIDE_TOUCH で、外側のタップは下のアプリに通しつつ通知だけ受け取る
+        card.setOnTouchListener { _, ev ->
+            if (ev.action == MotionEvent.ACTION_OUTSIDE) { hideHistoryCard(); true } else false
         }
-        card.addView(close)
 
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -652,7 +634,8 @@ class OverlayService : Service() {
             cardW, WindowManager.LayoutParams.WRAP_CONTENT,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -729,19 +712,17 @@ class OverlayService : Service() {
         val tabH = (density * 70).toInt()
 
         if (zoneViews.isNotEmpty()) {
-            // 透明ゾーンは画面比率を保って再配置（縦横の切り替えで画面外に消えないように）
-            val zoneW = (density * ZONE_W_DP).toInt()
-            val zoneH = (density * ZONE_H_DP).toInt()
-            for (zone in zoneViews) {
-                val zp = zone.layoutParams as? WindowManager.LayoutParams ?: continue
-                val xRatio = if (screenWidth > 0) zp.x.toFloat() / screenWidth else 1f
-                val yRatio = if (screenHeight > 0) zp.y.toFloat() / screenHeight else 0.5f
-                zp.x = (newWidth * xRatio).toInt().coerceIn(0, maxOf(0, newWidth - zoneW))
-                zp.y = (newHeight * yRatio).toInt().coerceIn(0, maxOf(0, newHeight - zoneH))
-                try { wm.updateViewLayout(zone, zp) } catch (_: Exception) {}
-            }
+            // 帯は新しい画面サイズで作り直す（回転で縦横が入れ替わるため位置計算をやり直す）
             screenWidth = newWidth
             screenHeight = newHeight
+            hideHistoryCard()
+            zoneViews.forEach { v -> try { wm.removeView(v) } catch (_: Exception) {} }
+            zoneViews.clear()
+            val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else
+                @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+            setupHotZone(overlayType)
             return
         }
 
