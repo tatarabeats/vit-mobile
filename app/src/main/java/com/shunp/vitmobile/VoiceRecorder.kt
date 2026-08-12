@@ -22,6 +22,11 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 class VoiceRecorder(private val ctx: Context) {
+    companion object {
+        /** これを超えたコマだけ「声が入っている」と数える（maxAmplitude は 0-32767） */
+        private const val VOICE_AMP = 2200
+    }
+
     private var recorder: MediaRecorder? = null
     private var currentFile: File? = null
     private var startMs: Long = 0
@@ -53,6 +58,10 @@ class VoiceRecorder(private val ctx: Context) {
             }
             recorder = r
             startMs = System.currentTimeMillis()
+            frames = 0
+            voicedFrames = 0
+            peakAmp = 0
+            startLevelSampling()
             prewarm()
             true
         } catch (e: Exception) {
@@ -161,6 +170,51 @@ class VoiceRecorder(private val ctx: Context) {
         }
     }
 
+    /**
+     * 『黙っていたのに勝手に入力される』を断つゲート（2026-08-12）。
+     * 録音中の音量を 100ms ごとに拾い、声が入っているコマ数で判定する。
+     * 長く録ったのに声が一瞬しか無い＝物音で、これを Whisper に渡すと必ず何か捏造してくる。
+     */
+    private var frames = 0
+    private var voicedFrames = 0
+    private var peakAmp = 0
+
+    private fun startLevelSampling() {
+        scope.launch {
+            while (recorder != null) {
+                val amp = amplitude()
+                if (amp > 0) {
+                    frames++
+                    if (amp > VOICE_AMP) voicedFrames++
+                    if (amp > peakAmp) peakAmp = amp
+                }
+                kotlinx.coroutines.delay(100)
+            }
+        }
+    }
+
+    /** 送ってよい中身か。false なら捨てる */
+    private fun hasVoice(durationMs: Long): Boolean {
+        val voicedMs = voicedFrames * 100L
+        if (peakAmp < VOICE_AMP) {
+            toast("声が入っていないので送らなかった")
+            return false
+        }
+        if (voicedMs < 350) {
+            toast("声が入っていないので送らなかった")
+            return false
+        }
+        if (durationMs >= 3000 && voicedMs < 800) {
+            toast("物音だけだったので送らなかった")
+            return false
+        }
+        if (durationMs >= 3000 && voicedMs.toFloat() / durationMs < 0.06f) {
+            toast("物音だけだったので送らなかった")
+            return false
+        }
+        return true
+    }
+
     /** 録音中の音量（0-32767）。0 は無音か録音していない */
     fun amplitude(): Int = try { recorder?.maxAmplitude ?: 0 } catch (_: Exception) { 0 }
 
@@ -181,6 +235,11 @@ class VoiceRecorder(private val ctx: Context) {
         recorder = null
         startMs = 0
         if (file == null) { onResult(null); return }
+        if (!hasVoice(durationMs)) {
+            try { file.delete() } catch (_: Exception) {}
+            onResult(null)
+            return
+        }
         scope.launch {
             var text = transcribe(file)
             if (!text.isNullOrBlank()) {

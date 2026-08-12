@@ -52,9 +52,15 @@ class OverlayService : Service() {
     private val zoneViews = mutableListOf<View>()
     private var watcherView: View? = null
     private var stripsAttached = false
+    private var zeroCoordCount = 0
+    private var statusView: View? = null
+    private var statusText: android.widget.TextView? = null
+    private var statusDot: View? = null
     private var historyCard: View? = null
     private var tapCount = 0
     private var lastTapAt = 0L
+    private var lastTapX = -9999f
+    private var lastTapY = -9999f
     private var zoneEditMode = false
     private var isFeedback = false
     private var triggerMode = Prefs.TRIGGER_ZONE
@@ -206,26 +212,29 @@ class OverlayService : Service() {
         showZoneHint(overlayType, 3000)
     }
 
-    /** 画面中央を覆う触れない窓。ここに来る ACTION_OUTSIDE ＝ 左右のキワへのタッチ */
+    /**
+     * 監視窓は **1×1px** で画面の隅に置く（v0.7.1 で作り直し）。
+     * v0.7.0 は画面中央を覆う窓に FLAG_NOT_TOUCHABLE を付けて置いたが、実機では
+     * その窓がタッチを飲み込み **画面中央が反応しなくなった**。覆う設計自体をやめる。
+     * 1px なら奪うのは1ピクセルだけで、画面のどこを触っても ACTION_OUTSIDE が届く。
+     * どこを触ったかは ACTION_OUTSIDE の座標で判定する。
+     */
     private fun setupWatcher(overlayType: Int) {
-        val band = (density * BAND_W_DP).toInt()
-        val centerW = maxOf(1, screenWidth - band * 2)
         val params = WindowManager.LayoutParams(
-            centerW, screenHeight,
+            1, 1,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = band
+            x = 0
             y = 0
         }
         val view = View(this).apply { setBackgroundColor(Color.TRANSPARENT) }
         view.setOnTouchListener { _, ev ->
-            if (ev.action == MotionEvent.ACTION_OUTSIDE) onEdgeTap()
+            if (ev.action == MotionEvent.ACTION_OUTSIDE) onOutsideTouch(ev.rawX, ev.rawY)
             false
         }
         watcherView = view
@@ -233,27 +242,84 @@ class OverlayService : Service() {
     }
 
     /**
+     * 画面のどこかに指が降りた。左右のキワに入っている時だけ数える。
+     * Android 12+ は他アプリ上のタッチ座標を隠す仕様があり、その場合は常に (0,0) で届く。
+     * 3回続けて座標が取れなかったら、座標に頼らない「帯を占有する方式」へ自動で切り替える。
+     */
+    private fun onOutsideTouch(x: Float, y: Float) {
+        if (x == 0f && y == 0f) {
+            zeroCoordCount++
+            if (zeroCoordCount >= 3) {
+                Prefs.setZonePassive(this, false)
+                Toast.makeText(
+                    this,
+                    "この端末では座標が取れないので、キワを占有する方式に切り替えた",
+                    Toast.LENGTH_LONG
+                ).show()
+                mainHandler.post { switchToOccupyMode() }
+            }
+            return
+        }
+        zeroCoordCount = 0
+        val band = density * BAND_W_DP
+        if (x > band && x < screenWidth - band) return
+
+        // スワイプの連打で誤爆しないよう、2打目は「同じ場所・素早く」を要求する。
+        // 本物のダブルタップはほぼ同じ点を220ms以内に叩く。スクロールの指下ろしは
+        // 位置が離れるか間隔が空くので、ここで弾ける（2026-08-12 実使用で更に短縮）。
+        val now = System.currentTimeMillis()
+        val near = abs(x - lastTapX) < density * 30 && abs(y - lastTapY) < density * 30
+        val quick = now - lastTapAt < 220
+        lastTapX = x
+        lastTapY = y
+        if (!quick || !near) {
+            tapCount = 0
+            lastTapAt = now
+            onEdgeTap(reset = true)
+            return
+        }
+        lastTapAt = now
+        onEdgeTap(reset = false)
+    }
+
+    private fun switchToOccupyMode() {
+        watcherView?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
+        watcherView = null
+        detachStrips()
+        attachStrips(touchable = true)
+    }
+
+    /**
      * キワに指が降りた。回数で意味を分ける。
      * 遅延なしで進めたいので「2回目で即開始し、3回目で取り消して履歴」という積み上げにする。
      */
-    private fun onEdgeTap() {
+    private fun onEdgeTap(reset: Boolean) {
         if (stripsAttached) return  // 録音中は帯側で拾うので二重に数えない
-        val now = System.currentTimeMillis()
-        tapCount = if (now - lastTapAt < 450) tapCount + 1 else 1
-        lastTapAt = now
+        tapCount = if (reset) 1 else tapCount + 1
+        if (isRecording) {
+            // 録音中: 1回=確定 / 2回=キャンセル。1回目は2打目が来ないと確定できないので少し待つ
+            if (tapCount == 1) {
+                mainHandler.postDelayed({
+                    if (isRecording && tapCount == 1) stopRecording()
+                }, 320)
+            } else if (tapCount == 2) {
+                cancelRecording()
+                flashStatus("キャンセルした")
+            }
+            return
+        }
         when (tapCount) {
             2 -> {
                 flashZone()
-                if (!isRecording) startRecording(feedback = false) else stopRecording()
+                startRecording(feedback = false)
             }
             3 -> {
-                if (isRecording) cancelRecording()
+                cancelRecording()
                 showHistoryCard()
             }
             4 -> {
                 hideHistoryCard()
                 startRecording(feedback = true)
-                Toast.makeText(this, "フィードバック録音中。タップで送信", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -332,7 +398,13 @@ class OverlayService : Service() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 if (zoneEditMode) return true
                 flashZone()
-                if (!isRecording) startRecording(feedback = false) else stopRecording()
+                // 録音中のダブルタップは **キャンセル**（長押しより速くて確実、駿平指定）
+                if (isRecording) {
+                    cancelRecording()
+                    flashStatus("キャンセルした")
+                } else {
+                    startRecording(feedback = false)
+                }
                 return true
             }
 
@@ -340,21 +412,6 @@ class OverlayService : Service() {
                 if (zoneEditMode) return true
                 if (isRecording) stopRecording()
                 return true
-            }
-
-            override fun onLongPress(e: MotionEvent) {
-                if (zoneEditMode) return
-                if (isRecording) {
-                    cancelRecording()
-                    Toast.makeText(this@OverlayService, "キャンセルしました", Toast.LENGTH_SHORT).show()
-                } else {
-                    startRecording(feedback = true)
-                    Toast.makeText(
-                        this@OverlayService,
-                        "フィードバック録音中。タップで送信",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
             }
         })
 
@@ -404,6 +461,10 @@ class OverlayService : Service() {
         detachStrips()
         watcherView?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
         watcherView = null
+        statusView?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
+        statusView = null
+        statusText = null
+        statusDot = null
         zoneEditMode = false
         try { wm.removeView(micButton) } catch (_: Exception) {}
         try { wm.removeView(collapseTab) } catch (_: Exception) {}
@@ -584,7 +645,7 @@ class OverlayService : Service() {
                 }, 600)
             }
             buzz(40)
-            if (!feedback) toast("● 録音中 — タップで確定")
+            showStatus(if (feedback) "フィードバック録音中 — タップで送信" else "録音中 — タップで確定", feedback)
         }
     }
 
@@ -598,9 +659,10 @@ class OverlayService : Service() {
         releaseStripsIfPassive()
         updateZoneVisual()
         buzz(20, 60, 20)
-        toast(if (wasFeedback) "フィードバック送信中…" else "変換中…")
+        showStatus(if (wasFeedback) "送信中…" else "変換中…", wasFeedback)
         recorder?.stopAndTranscribe { text ->
-            if (text.isNullOrBlank()) { toast("聞き取れなかった"); return@stopAndTranscribe }
+            hideStatus()
+            if (text.isNullOrBlank()) { flashStatus("聞き取れなかった"); return@stopAndTranscribe }
             if (wasFeedback) Feedback.submit(this, text) else copyAndPaste(text)
         }
     }
@@ -614,7 +676,73 @@ class OverlayService : Service() {
         releaseStripsIfPassive()
         updateZoneVisual()
         buzz(120)
+        hideStatus()
         recorder?.cancel()
+    }
+
+    // ==================== 状態表示（自前オーバーレイ） ====================
+    // Toast はシステムの待ち行列を通るので、混んでいると数秒遅れて出る。
+    // 録音中かどうかは即座に分からないと使えないので、自分のウィンドウで出す。
+
+    private fun showStatus(msg: String, feedback: Boolean) {
+        mainHandler.post {
+            if (statusView == null) buildStatusView()
+            statusText?.text = msg
+            statusDot?.setBackgroundResource(
+                if (feedback) R.drawable.zone_feedback else R.drawable.zone_recording
+            )
+            statusView?.visibility = View.VISIBLE
+        }
+    }
+
+    private fun hideStatus() {
+        mainHandler.post { statusView?.visibility = View.GONE }
+    }
+
+    /** 一瞬だけ出して自動で消す（エラー通知用） */
+    private fun flashStatus(msg: String) {
+        showStatus(msg, false)
+        mainHandler.postDelayed({ hideStatus() }, 1500)
+    }
+
+    private fun buildStatusView() {
+        val padH = (density * 16).toInt()
+        val padV = (density * 10).toInt()
+        val row = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundResource(R.drawable.history_card_bg)
+            setPadding(padH, padV, padH, padV)
+        }
+        val dotSize = (density * 12).toInt()
+        val dot = View(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(dotSize, dotSize).apply {
+                rightMargin = (density * 10).toInt()
+            }
+            setBackgroundResource(R.drawable.zone_recording)
+        }
+        val tv = android.widget.TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 14f
+        }
+        row.addView(dot)
+        row.addView(tv)
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = (density * 72).toInt()
+        }
+        statusView = row
+        statusText = tv
+        statusDot = dot
+        try { wm.addView(row, params) } catch (_: Exception) { statusView = null }
     }
 
     private fun toast(msg: String) {
@@ -643,18 +771,17 @@ class OverlayService : Service() {
 
     private fun showHistoryCard() {
         hideHistoryCard()
-        val items = Prefs.getHistory(this).take(5)
-        if (items.isEmpty()) { toast("履歴はまだ無い"); return }
+        val items = Prefs.getHistory(this)
+        if (items.isEmpty()) { flashStatus("履歴はまだ無い"); return }
 
         val pad = (density * 14).toInt()
-        val card = android.widget.LinearLayout(this).apply {
+        val list = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
-            setBackgroundResource(R.drawable.history_card_bg)
             setPadding(pad, pad, pad, pad)
         }
         for ((_, text) in items) {
             val row = android.widget.TextView(this).apply {
-                this.text = if (text.length > 60) text.take(60) + "…" else text
+                this.text = if (text.length > 90) text.take(90) + "…" else text
                 setTextColor(Color.WHITE)
                 textSize = 15f
                 setPadding(pad / 2, pad / 2, pad / 2, pad / 2)
@@ -664,7 +791,13 @@ class OverlayService : Service() {
                     buzz(30)
                 }
             }
-            card.addView(row)
+            list.addView(row)
+        }
+        // 過去まで遡れるようスクロールさせる（画面の6割までで打ち止め）
+        val card = android.widget.ScrollView(this).apply {
+            setBackgroundResource(R.drawable.history_card_bg)
+            isVerticalScrollBarEnabled = true
+            addView(list)
         }
         // カードの外を触ったら閉じる（閉じるボタンを押させない）。
         // FLAG_WATCH_OUTSIDE_TOUCH で、外側のタップは下のアプリに通しつつ通知だけ受け取る
@@ -679,8 +812,9 @@ class OverlayService : Service() {
         val cardW = minOf((density * 300).toInt(), screenWidth - (density * 24).toInt())
         val zp = zoneParams
         // 入力欄のフォーカスを奪わないよう NOT_FOCUSABLE のまま出す（挿入先が変わらない）
+        val maxH = (screenHeight * 0.6f).toInt()
         val params = WindowManager.LayoutParams(
-            cardW, WindowManager.LayoutParams.WRAP_CONTENT,
+            cardW, maxH,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
@@ -693,8 +827,8 @@ class OverlayService : Service() {
         }
         historyCard = card
         try { wm.addView(card, params) } catch (_: Exception) { historyCard = null }
-        // 放置されても邪魔にならないよう自動で消す
-        mainHandler.postDelayed({ hideHistoryCard() }, 8000)
+        // 放置されても邪魔にならないよう自動で消す（遡って読む時間を考えて長めに）
+        mainHandler.postDelayed({ hideHistoryCard() }, 20000)
     }
 
     private fun hideHistoryCard() {
@@ -707,6 +841,8 @@ class OverlayService : Service() {
     private val levelTick = object : Runnable {
         override fun run() {
             if (!isRecording) return
+            val ampNow = (recorder?.amplitude() ?: 0).coerceIn(0, 12000) / 12000f
+            statusDot?.alpha = 0.35f + 0.65f * ampNow
             if (zoneViews.isNotEmpty() && !zoneEditMode) {
                 // maxAmplitude(0-32767) を 0.45〜1.0 の濃さに割り当てる。
                 // 声を出している間だけドットが濃くなる＝拾えているのが目で分かる
