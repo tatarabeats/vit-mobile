@@ -394,60 +394,6 @@ class OverlayService : Service() {
         }, ms)
     }
 
-    /** 帯の場所を一定時間だけ見せる（触れない状態で出すので操作は邪魔しない） */
-    private fun showZoneHint(overlayType: Int, ms: Long) {
-        if (stripsAttached) return
-        attachStrips()
-        zoneEditMode = true
-        zoneViews.forEach { it.setBackgroundResource(R.drawable.zone_edit) }
-        mainHandler.postDelayed({
-            zoneEditMode = false
-            if (!isRecording) detachStrips() else updateZoneVisual()
-        }, ms)
-    }
-
-    private fun attachZoneTouchListener(view: View) {
-        val detector = android.view.GestureDetector(this, object :
-            android.view.GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent): Boolean = true
-
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                if (zoneEditMode) return true
-                flashZone()
-                // 録音中のダブルタップは **キャンセル**（長押しより速くて確実、駿平指定）
-                if (isRecording) {
-                    cancelRecording()
-                    flashStatus("キャンセルした")
-                } else {
-                    startRecording(feedback = false)
-                }
-                return true
-            }
-
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                if (zoneEditMode) return true
-                if (isRecording) stopRecording()
-                return true
-            }
-        })
-
-        view.setOnTouchListener { _, ev ->
-            // 3回タップ = 履歴（帯を実体化している時の経路）
-            if (!zoneEditMode && ev.action == MotionEvent.ACTION_DOWN) {
-                val now = System.currentTimeMillis()
-                tapCount = if (now - lastTapAt < 450) tapCount + 1 else 1
-                lastTapAt = now
-                if (tapCount >= 3) {
-                    tapCount = 0
-                    if (isRecording) cancelRecording()
-                    showHistoryCard()
-                    return@setOnTouchListener true
-                }
-            }
-            detector.onTouchEvent(ev)
-            true
-        }
-    }
 
     /** 帯がどこにあるかを5秒だけ見せる（触れない状態で出すので操作は邪魔しない） */
     private fun enterZoneEditMode() {
