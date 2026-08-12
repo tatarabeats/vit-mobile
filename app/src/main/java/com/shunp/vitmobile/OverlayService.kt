@@ -264,6 +264,11 @@ class OverlayService : Service() {
         val band = density * BAND_W_DP
         if (x > band && x < screenWidth - band) return
 
+        // キーボードが出ている間、その上（バックスペース連打など）では反応させない。
+        // 文字を消すためのダブルタップで録音が始まると邪魔でしかない。
+        val imeTop = InputAccessibilityService.imeTop()
+        if (imeTop in 0..screenHeight && y >= imeTop) return
+
         // スワイプの連打で誤爆しないよう、2打目は「同じ場所・素早く」を要求する。
         // 本物のダブルタップはほぼ同じ点を220ms以内に叩く。スクロールの指下ろしは
         // 位置が離れるか間隔が空くので、ここで弾ける（2026-08-12 実使用で更に短縮）。

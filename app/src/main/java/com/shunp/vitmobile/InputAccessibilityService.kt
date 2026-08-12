@@ -27,9 +27,30 @@ class InputAccessibilityService : AccessibilityService() {
         @Volatile
         var lastFocusedClass: String? = null
 
-        /** 起動ゾーンから「素通しタップ」を頼むために保持する */
+        /** 起動ゾーンから画面の状態を問い合わせるために保持する */
         @Volatile
         var instance: InputAccessibilityService? = null
+
+        /**
+         * 表示中のソフトキーボードの上端 Y。出ていなければ -1。
+         * キーボードの端（バックスペース等）を連打した時に起動ゾーンが反応してしまうため、
+         * その領域を除外するのに使う（2026-08-12 駿平から報告）。
+         */
+        fun imeTop(): Int {
+            val svc = instance ?: return -1
+            return try {
+                var top = -1
+                for (w in svc.windows) {
+                    if (w.type != AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+                    val r = Rect()
+                    w.getBoundsInScreen(r)
+                    if (r.height() > 0 && (top < 0 || r.top < top)) top = r.top
+                }
+                top
+            } catch (_: Exception) {
+                -1
+            }
+        }
 
         /**
          * 画面のキワに置いた起動ゾーンは、そこへの普通のタップを飲み込んでしまう。
