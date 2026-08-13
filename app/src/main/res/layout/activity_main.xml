@@ -213,6 +213,37 @@
             android:textSize="13sp"
             android:paddingBottom="6dp" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="このアプリでは起動しない（パッケージ名・改行区切り）"
+            android:textColor="#FFFFFFFF"
+            android:textSize="15sp"
+            android:paddingBottom="6dp" />
+
+        <EditText
+            android:id="@+id/excludedInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="100dp"
+            android:gravity="top|start"
+            android:inputType="textMultiLine"
+            android:textColor="#FFFFFFFF"
+            android:textColorHint="#80FFFFFF"
+            android:background="#FF1A2440"
+            android:padding="14dp"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/saveExcluded"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="除外アプリを保存"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
+
         <Button
             android:id="@+id/btnEditZone"
             android:layout_width="match_parent"

@@ -18,6 +18,7 @@ object Prefs {
     private const val KEY_GITHUB_TOKEN = "github_token"
     private const val KEY_VOLUME_TRIGGER = "volume_trigger"
     private const val KEY_DTAP_MS = "double_tap_ms"
+    private const val KEY_EXCLUDED = "excluded_packages"
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
     const val TRIGGER_ZONE = "zone"
@@ -57,6 +58,45 @@ object Prefs {
     fun setDoubleTapMs(ctx: Context, ms: Int) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putInt(KEY_DTAP_MS, ms).apply()
+    }
+
+    /**
+     * 起動ゾーンを無効にするアプリ（パッケージ名・改行区切り）。
+     * ダブルタップに別の意味があるアプリ（YouTubeの10秒送り、写真の拡大、SNSのいいね）で
+     * 録音が始まると邪魔でしかない。
+     */
+    private val DEFAULT_EXCLUDED = listOf(
+        "com.google.android.youtube",
+        "com.google.android.apps.youtube.music",
+        "com.google.android.apps.photos",
+        "com.google.android.apps.maps",
+        "com.instagram.android",
+        "com.zhiliaoapp.musically",
+        "com.ss.android.ugc.trill",
+        "com.twitter.android",
+        "com.android.chrome",
+        "com.brave.browser",
+        "com.sec.android.app.sbrowser",
+        "com.samsung.android.gallery3d",
+        "com.netflix.mediaclient",
+        "com.amazon.avod.thirdpartyclient",
+    ).joinToString("
+")
+
+    fun getExcludedPackages(ctx: Context): String =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_EXCLUDED, DEFAULT_EXCLUDED) ?: DEFAULT_EXCLUDED
+
+    fun setExcludedPackages(ctx: Context, text: String) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_EXCLUDED, text).apply()
+    }
+
+    fun isExcluded(ctx: Context, pkg: String?): Boolean {
+        if (pkg.isNullOrBlank()) return false
+        return getExcludedPackages(ctx).lineSequence()
+            .map { it.trim() }
+            .any { it.isNotEmpty() && it.equals(pkg, ignoreCase = true) }
     }
 
     fun getGithubToken(ctx: Context): String? =

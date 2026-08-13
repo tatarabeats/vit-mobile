@@ -89,6 +89,12 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        b.excludedInput.setText(Prefs.getExcludedPackages(this))
+        b.saveExcluded.setOnClickListener {
+            Prefs.setExcludedPackages(this, b.excludedInput.text.toString())
+            Toast.makeText(this, "除外アプリを保存しました", Toast.LENGTH_SHORT).show()
+        }
+
         b.btnEditZone.setOnClickListener {
             if (Prefs.getTriggerMode(this) != Prefs.TRIGGER_ZONE) {
                 Toast.makeText(this, "起動ゾーンをONにしてから確認してください", Toast.LENGTH_SHORT).show()

@@ -31,10 +31,19 @@ class InputAccessibilityService : AccessibilityService() {
         @Volatile
         var instance: InputAccessibilityService? = null
 
+        /** 今フォアグラウンドにあるアプリのパッケージ名 */
+        fun currentPackage(): String? {
+            val svc = instance ?: return null
+            return try {
+                svc.rootInActiveWindow?.packageName?.toString()
+            } catch (_: Exception) {
+                null
+            }
+        }
+
         /**
          * 表示中のソフトキーボードの上端 Y。出ていなければ -1。
-         * キーボードの端（バックスペース等）を連打した時に起動ゾーンが反応してしまうため、
-         * その領域を除外するのに使う（2026-08-12 駿平から報告）。
+         * キーボードの端（バックスペース等）の連打で起動ゾーンが反応しないよう除外するのに使う。
          */
         fun imeTop(): Int {
             val svc = instance ?: return -1

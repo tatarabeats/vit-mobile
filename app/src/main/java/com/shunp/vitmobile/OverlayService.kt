@@ -252,6 +252,8 @@ class OverlayService : Service() {
      * 3回続けて座標が取れなかったら、座標に頼らない「帯を占有する方式」へ自動で切り替える。
      */
     private fun onOutsideTouch(x: Float, y: Float) {
+        // ダブルタップに別の意味があるアプリ（YouTubeの10秒送り等）では起動しない
+        if (Prefs.isExcluded(this, InputAccessibilityService.currentPackage())) return
         if (x == 0f && y == 0f) {
             // 座標が隠される端末（Android 12+ の制限）。位置で絞れないので
             // 「画面のどこでもダブルタップ」で動かす。ただしキーボードが出ている間は
