@@ -668,14 +668,13 @@ class OverlayService : Service() {
         mainHandler.post {
             statusState = state
             if (statusView == null) buildStatusView()
-            statusDot?.setBackgroundColor(
-                when (state) {
-                    "rec" -> Color.parseColor("#FFE04040")
-                    "feedback" -> gold
-                    "busy" -> gold
-                    else -> Color.parseColor("#FF8A8F9E")
-                }
-            )
+            val c = when (state) {
+                "rec" -> Color.parseColor("#FFE04040")
+                "feedback" -> gold
+                "busy" -> gold
+                else -> Color.parseColor("#FF8A8F9E")
+            }
+            (statusDot?.background as? android.graphics.drawable.GradientDrawable)?.setColor(c)
             statusView?.visibility = View.VISIBLE
             statusPulse?.cancel()
             if (state == "busy") {
@@ -723,7 +722,10 @@ class OverlayService : Service() {
 
     private fun buildStatusView() {
         val line = View(this).apply {
-            setBackgroundColor(Color.parseColor("#FFE04040"))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = density * 2f
+                setColor(Color.parseColor("#FFE04040"))
+            }
         }
         val params = WindowManager.LayoutParams(
             (density * 120).toInt(), (density * 3).toInt(),
@@ -768,18 +770,25 @@ class OverlayService : Service() {
 
     // ==================== 履歴カード（3回タップ） ====================
 
+    private var levelSmooth = 0f
+    private var breathPhase = 0f
+
     private val levelTick = object : Runnable {
         override fun run() {
             if (!isRecording) return
-            // maxAmplitude(0-32767) をラインの長さに割り当てる。
-            // 声を出している間だけ伸びるので、拾えているのが一目で分かる
+            // 生の音量はガタつくので指数平滑をかけ、60fps で描く。
+            // 無音の時も微かに呼吸させて「生きている」ことを見せる
             val amp = (recorder?.amplitude() ?: 0).coerceIn(0, 12000) / 12000f
-            setStatusWidth(0.15f + 0.85f * amp)
-            mainHandler.postDelayed(this, 80)
+            levelSmooth += (amp - levelSmooth) * 0.35f
+            breathPhase += 0.06f
+            val breath = 0.04f * (1f + kotlin.math.sin(breathPhase.toDouble()).toFloat()) / 2f
+            setStatusWidth(0.12f + breath + 0.88f * levelSmooth)
+            mainHandler.postDelayed(this, 16)
         }
     }
 
     private fun startLevelMeter() {
+        levelSmooth = 0f
         mainHandler.removeCallbacks(levelTick)
         mainHandler.postDelayed(levelTick, 100)
     }
