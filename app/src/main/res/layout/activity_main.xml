@@ -267,6 +267,15 @@
             android:textSize="13sp" />
 
         <Button
+            android:id="@+id/pickAutoEnter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="アプリ一覧から選んで追加"
+            android:textColor="#FFFFFFFF"
+            android:backgroundTint="#FF1A2440" />
+
+        <Button
             android:id="@+id/saveAutoEnter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

@@ -94,6 +94,8 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "自動Enterの対象を保存しました", Toast.LENGTH_SHORT).show()
         }
 
+        b.pickAutoEnter.setOnClickListener { pickAppForAutoEnter() }
+
         b.btnEditZone.setOnClickListener {
             if (Prefs.getTriggerMode(this) != Prefs.TRIGGER_ZONE) {
                 Toast.makeText(this, "起動ゾーンをONにしてから確認してください", Toast.LENGTH_SHORT).show()
@@ -176,6 +178,33 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "停止しました", Toast.LENGTH_SHORT).show()
         }
 
+    }
+
+    /** インストール済みアプリから選んで、自動Enterの対象に追加する */
+    private fun pickAppForAutoEnter() {
+        val pm = packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val apps = pm.queryIntentActivities(intent, 0)
+            .map { (it.loadLabel(pm)?.toString() ?: it.activityInfo.packageName) to it.activityInfo.packageName }
+            .distinctBy { it.second }
+            .sortedBy { it.first }
+        if (apps.isEmpty()) return
+        val labels = apps.map { "${it.first}
+${it.second}" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("送信まで行うアプリを追加")
+            .setItems(labels) { _, which ->
+                val pkg = apps[which].second
+                val cur = b.autoEnterInput.text.toString().trimEnd()
+                if (!cur.lineSequence().any { it.trim() == pkg }) {
+                    b.autoEnterInput.setText(if (cur.isBlank()) pkg else "$cur
+$pkg")
+                }
+                Prefs.setAutoEnterPackages(this, b.autoEnterInput.text.toString())
+                Toast.makeText(this, "${apps[which].first} を追加した", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("閉じる", null)
+            .show()
     }
 
     /** OverlayService が動いているか。API 26+ では自分のサービスだけが返る */

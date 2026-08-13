@@ -190,20 +190,32 @@ class InputAccessibilityService : AccessibilityService() {
             return
         }
 
-        // attempt 1: ACTION_PASTE
+        // クリップボードを使わなくなったので、テキストを渡された時は SET_TEXT を先に使う。
+        // （ACTION_PASTE はクリップボードの中身を貼るので、古い内容が入ってしまう）
+        if (providedText != null) {
+            if (setTextOnNode(node, providedText)) {
+                maybeSendEnter(node)
+                return
+            }
+        }
+
+        // テキストが渡されていない場合のみクリップボード経由
         if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
             Log.d(TAG, "ACTION_PASTE ok")
             maybeSendEnter(node)
             return
         }
-        // attempt 2: focus → paste
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
             Log.d(TAG, "ACTION_PASTE after focus ok")
             maybeSendEnter(node)
             return
         }
-        // attempt 3: ACTION_SET_TEXT（既存テキスト + 認識テキスト）
+        if (setTextOnNode(node, text)) maybeSendEnter(node)
+    }
+
+    /** 既存テキストの後ろに追記する形で入力欄へ書き込む */
+    private fun setTextOnNode(node: AccessibilityNodeInfo, text: String): Boolean {
         val existing = node.text?.toString() ?: ""
         val combined = if (existing.isEmpty()) text else "$existing$text"
         val bundle = Bundle().apply {
@@ -212,9 +224,10 @@ class InputAccessibilityService : AccessibilityService() {
                 combined
             )
         }
-        val r3 = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
-        Log.d(TAG, "ACTION_SET_TEXT result=$r3 combinedLen=${combined.length}")
-        maybeSendEnter(node)
+        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        val ok = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+        Log.d(TAG, "ACTION_SET_TEXT result=$ok len=${combined.length}")
+        return ok
     }
 
     /**
@@ -224,19 +237,59 @@ class InputAccessibilityService : AccessibilityService() {
     private fun maybeSendEnter(node: AccessibilityNodeInfo) {
         val pkg = node.packageName?.toString() ?: currentPackage()
         if (!Prefs.isAutoEnter(this, pkg)) return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         // 貼り付けが反映されてから送る
         android.os.Handler(mainLooper).postDelayed({
-            try {
-                val target = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: node
-                val ok = target.performAction(
-                    AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id
-                )
-                Log.d(TAG, "auto enter pkg=$pkg result=$ok")
-            } catch (e: Exception) {
-                Log.d(TAG, "auto enter failed: ${e.message}")
+            val target = try {
+                rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: node
+            } catch (_: Exception) { node }
+
+            // 1) IME の実行キー相当（対応しているアプリはこれで送信される）
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try {
+                    if (target.performAction(
+                            AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id
+                        )
+                    ) {
+                        Log.d(TAG, "auto enter: ime_enter ok pkg=$pkg")
+                        return@postDelayed
+                    }
+                } catch (_: Exception) {}
             }
-        }, 250)
+
+            // 2) 送信ボタンを探して押す。Compose 製アプリ（Claude 等）は
+            //    実行キーを受け付けないことがあるため、こちらが本命になる
+            val btn = try { findSendButton(rootInActiveWindow) } catch (_: Exception) { null }
+            if (btn != null) {
+                val ok = btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                Log.d(TAG, "auto enter: send button click=$ok pkg=$pkg")
+            } else {
+                Log.d(TAG, "auto enter: no way to send pkg=$pkg")
+            }
+        }, 300)
+    }
+
+    private val sendWords = listOf("送信", "send", "submit", "送る")
+
+    /** 「送信」に見えるクリック可能なノードを探す（画面下部にあるものを優先） */
+    private fun findSendButton(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (root == null) return null
+        var best: AccessibilityNodeInfo? = null
+        var bestY = -1
+        fun walk(n: AccessibilityNodeInfo?) {
+            if (n == null) return
+            val label = ((n.contentDescription?.toString() ?: "") + " " +
+                (n.text?.toString() ?: "")).trim().lowercase()
+            if (n.isClickable && label.isNotEmpty() &&
+                sendWords.any { label.contains(it) } && label.length <= 12
+            ) {
+                val r = Rect()
+                n.getBoundsInScreen(r)
+                if (r.centerY() > bestY) { bestY = r.centerY(); best = n }
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i))
+        }
+        walk(root)
+        return best
     }
 
     private fun findFocusedNode(): AccessibilityNodeInfo? {

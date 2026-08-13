@@ -65,7 +65,7 @@ class VoiceRecorder(private val ctx: Context) {
             prewarm()
             true
         } catch (e: Exception) {
-            toast("録音失敗: ${e.message}")
+            android.util.Log.d("VIT", "rec failed: ${e.message}")
             try { r.release() } catch (_: Exception) {}
             false
         }
@@ -197,19 +197,19 @@ class VoiceRecorder(private val ctx: Context) {
     private fun hasVoice(durationMs: Long): Boolean {
         val voicedMs = voicedFrames * 100L
         if (peakAmp < VOICE_AMP) {
-            toast("声が入っていないので送らなかった")
+            android.util.Log.d("VIT", "skip: no voice")
             return false
         }
         if (voicedMs < 350) {
-            toast("声が入っていないので送らなかった")
+            android.util.Log.d("VIT", "skip: no voice")
             return false
         }
         if (durationMs >= 3000 && voicedMs < 800) {
-            toast("物音だけだったので送らなかった")
+            android.util.Log.d("VIT", "skip: no voice")
             return false
         }
         if (durationMs >= 3000 && voicedMs.toFloat() / durationMs < 0.06f) {
-            toast("物音だけだったので送らなかった")
+            android.util.Log.d("VIT", "skip: no voice")
             return false
         }
         return true
@@ -270,7 +270,7 @@ class VoiceRecorder(private val ctx: Context) {
 
     private suspend fun transcribe(file: File): String? = withContext(Dispatchers.IO) {
         val key = Prefs.getGroqKey(ctx)
-        if (key.isNullOrBlank()) { toast("Groq APIキー未設定"); return@withContext null }
+        if (key.isNullOrBlank()) { return@withContext null }
 
         val dict = Prefs.getDictionary(ctx).trim()
         val builder = MultipartBody.Builder()
@@ -299,14 +299,14 @@ class VoiceRecorder(private val ctx: Context) {
         try {
             client.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) {
-                    toast("Groq ${resp.code}")
+                    android.util.Log.d("VIT", "groq ${resp.code}")
                     return@withContext null
                 }
                 val json = JSONObject(resp.body?.string() ?: "{}")
                 json.optString("text").trim()
             }
         } catch (e: Exception) {
-            toast("Groq失敗: ${e.message}")
+            android.util.Log.d("VIT", "groq failed: ${e.message}")
             null
         }
     }

@@ -798,8 +798,16 @@ class OverlayService : Service() {
 
     private fun copyAndPaste(text: String) {
         Prefs.addHistory(this, text)
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("VIT", text))
+        // クリップボードには書かない。書くと Windows とのリンク（Phone Link）が
+        // 「接続デバイスにコピーしました」を毎回出して邪魔になる（駿平 2026-08-13）。
+        // 挿入はユーザー補助へテキストを直接渡す経路だけで足りる。
+        val acc = InputAccessibilityService.instance
+        if (acc == null) {
+            // ユーザー補助が落ちている時だけ、最後の手段としてクリップボードに残す
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("VIT", text))
+            return
+        }
         val intent = Intent(InputAccessibilityService.ACTION_PASTE).apply {
             setPackage(packageName)
             putExtra(InputAccessibilityService.EXTRA_TEXT, text)
