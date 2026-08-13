@@ -42,6 +42,22 @@ class InputAccessibilityService : AccessibilityService() {
         }
 
         /**
+         * 入力欄にフォーカスが当たっているか。
+         * 除外アプリ（ブラウザ等）でも、文字を打つ場面なら音声入力を使いたい。
+         * 動画を見ているだけの時は入力欄が無いので、そこで区別する。
+         */
+        fun hasFocusedEditable(): Boolean {
+            val svc = instance ?: return false
+            return try {
+                val root = svc.rootInActiveWindow ?: return false
+                val n = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+                n.isEditable || (n.className?.toString()?.contains("Edit", true) == true)
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        /**
          * 表示中のソフトキーボードの上端 Y。出ていなければ -1。
          * キーボードの端（バックスペース等）の連打で起動ゾーンが反応しないよう除外するのに使う。
          */
