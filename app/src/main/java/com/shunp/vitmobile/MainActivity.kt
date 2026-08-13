@@ -173,6 +173,8 @@ class MainActivity : AppCompatActivity() {
             moveTaskToBack(true)
         }
 
+        b.btnHistory.setOnClickListener { showHistoryDialog() }
+
         b.btnStopOverlay.setOnClickListener {
             stopService(Intent(this, OverlayService::class.java))
             Toast.makeText(this, "停止しました", Toast.LENGTH_SHORT).show()
@@ -180,26 +182,89 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    /** インストール済みアプリから選んで、自動Enterの対象に追加する */
+    /**
+     * 喋った内容の一覧。挿入したものも、取り消したものも全部ここに残る。
+     * クリップボードには書かない方針にしたので、拾い直す場所がここになる。
+     */
+    private fun showHistoryDialog() {
+        val items = Prefs.getHistory(this)
+        if (items.isEmpty()) {
+            Toast.makeText(this, "まだ何もありません", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val fmt = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.JAPAN)
+        val labels = items.map { (ts, text) -> "[" + fmt.format(java.util.Date(ts)) + "] " + text }
+            .toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("喋った内容 " + items.size + " 件（タップでコピー）")
+            .setItems(labels) { _, which ->
+                val text = items[which].second
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("VIT", text))
+                Toast.makeText(this, "コピーしました", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("全消去") { _, _ ->
+                Prefs.clearHistory(this)
+                Toast.makeText(this, "消しました", Toast.LENGTH_SHORT).show()
+            }
+            .setPositiveButton("閉じる", null)
+            .show()
+    }
+
+    /** インストール済みアプリから選んで、自動Enterの対象に追加する（アイコン付き） */
     private fun pickAppForAutoEnter() {
         val pm = packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val apps = pm.queryIntentActivities(intent, 0)
-            .map { (it.loadLabel(pm)?.toString() ?: it.activityInfo.packageName) to it.activityInfo.packageName }
+            .map {
+                Triple(
+                    it.loadLabel(pm)?.toString() ?: it.activityInfo.packageName,
+                    it.activityInfo.packageName,
+                    it.loadIcon(pm)
+                )
+            }
             .distinctBy { it.second }
             .sortedBy { it.first }
-        if (apps.isEmpty()) return
-        val labels = apps.map { "${it.first}\n${it.second}" }.toTypedArray()
+        if (apps.isEmpty()) {
+            Toast.makeText(this, "アプリ一覧を取得できなかった", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val adapter = object : android.widget.ArrayAdapter<Triple<String, String, android.graphics.drawable.Drawable>>(
+            this, 0, apps
+        ) {
+            override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
+                val row = convertView as? android.widget.LinearLayout ?: android.widget.LinearLayout(context).apply {
+                    orientation = android.widget.LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    val pad = (resources.displayMetrics.density * 12).toInt()
+                    setPadding(pad, pad, pad, pad)
+                    addView(android.widget.ImageView(context).apply {
+                        val sz = (resources.displayMetrics.density * 40).toInt()
+                        layoutParams = android.widget.LinearLayout.LayoutParams(sz, sz).apply {
+                            rightMargin = (resources.displayMetrics.density * 14).toInt()
+                        }
+                    })
+                    addView(android.widget.TextView(context).apply {
+                        setTextColor(android.graphics.Color.WHITE)
+                        textSize = 16f
+                    })
+                }
+                val (label, pkg, icon) = getItem(position)!!
+                (row.getChildAt(0) as android.widget.ImageView).setImageDrawable(icon)
+                (row.getChildAt(1) as android.widget.TextView).text = label
+                return row
+            }
+        }
         AlertDialog.Builder(this)
             .setTitle("送信まで行うアプリを追加")
-            .setItems(labels) { _, which ->
+            .setAdapter(adapter) { _, which ->
                 val pkg = apps[which].second
                 val cur = b.autoEnterInput.text.toString().trimEnd()
                 if (!cur.lineSequence().any { it.trim() == pkg }) {
-                    b.autoEnterInput.setText(if (cur.isBlank()) pkg else "$cur\n$pkg")
+                    b.autoEnterInput.setText(if (cur.isBlank()) pkg else cur + "\n" + pkg)
                 }
                 Prefs.setAutoEnterPackages(this, b.autoEnterInput.text.toString())
-                Toast.makeText(this, "${apps[which].first} を追加した", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, apps[which].first + " を追加した", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("閉じる", null)
             .show()

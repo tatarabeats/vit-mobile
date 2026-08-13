@@ -156,16 +156,20 @@ class InputAccessibilityService : AccessibilityService() {
      */
     override fun onKeyEvent(event: android.view.KeyEvent?): Boolean {
         val e = event ?: return false
-        if (!Prefs.isVolumeTrigger(this)) return false
         if (e.action != android.view.KeyEvent.ACTION_DOWN) return false
         if (e.keyCode != android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return false
+        // 録音中は設定に関係なく「取り消し」に使う（ジェスチャー枠を消費しない取り消し手段）
+        val recording = OverlayService.isRecordingNow
+        if (!recording && !Prefs.isVolumeTrigger(this)) return false
         val now = System.currentTimeMillis()
         if (now - lastVolKeyAt in 1..450) {
             lastVolKeyAt = 0
             try {
                 startForegroundService(
-                    Intent(this, OverlayService::class.java)
-                        .setAction(OverlayService.ACTION_TRIGGER)
+                    Intent(this, OverlayService::class.java).setAction(
+                        if (recording) OverlayService.ACTION_CANCEL
+                        else OverlayService.ACTION_TRIGGER
+                    )
                 )
             } catch (_: Exception) {}
         } else {

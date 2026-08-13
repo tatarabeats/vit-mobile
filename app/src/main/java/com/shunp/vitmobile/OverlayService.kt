@@ -39,6 +39,12 @@ class OverlayService : Service() {
         const val ACTION_TRIGGER = "com.shunp.vitmobile.TRIGGER"
         /** フィードバック録音のトグル */
         const val ACTION_TRIGGER_FEEDBACK = "com.shunp.vitmobile.TRIGGER_FEEDBACK"
+        /** 録音の取り消し（通知のボタン・音量キーから） */
+        const val ACTION_CANCEL = "com.shunp.vitmobile.CANCEL"
+
+        /** 音量キーの意味を切り替えるために、録音中かどうかを外から見えるようにする */
+        @Volatile
+        var isRecordingNow = false
 
         /**
           * 左右のキワの帯の幅。タッチを横取りしないので、広めに取っても下のアプリに影響しない。
@@ -71,6 +77,7 @@ class OverlayService : Service() {
     private var triggerMode = Prefs.TRIGGER_ZONE
     private var recorder: VoiceRecorder? = null
     private var isRecording = false
+        set(value) { field = value; isRecordingNow = value }
     private var isCollapsed = false
     private var density = 1f
     private var screenWidth = 0
@@ -96,6 +103,7 @@ class OverlayService : Service() {
             ACTION_EDIT_ZONE -> enterZoneEditMode()
             ACTION_RELOAD_TRIGGER -> reloadTrigger()
             ACTION_TRIGGER -> onExternalTrigger()
+            ACTION_CANCEL -> if (isRecording) { cancelRecording(); flashStatus("idle") }
             ACTION_TRIGGER_FEEDBACK -> {
                 if (isRecording) stopRecording() else startRecording(feedback = true)
             }
@@ -104,22 +112,22 @@ class OverlayService : Service() {
     }
 
     private fun startAsForeground() {
-        val chanId = "vit_overlay"
+        // 常駐通知は見せたくない（駿平 2026-08-13）。常駐サービスには通知が必須なので、
+        // 重要度を最小にして「サイレント通知」へ落とし、バッジもステータスバーの音も出さない。
+        // 重要度は作成後に変更できないので、チャンネルIDごと新しくしてある。
+        val chanId = "vit_overlay_min"
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(chanId) == null) {
-            val chan = NotificationChannel(chanId, "VIT Overlay", NotificationManager.IMPORTANCE_LOW)
+            val chan = NotificationChannel(chanId, "VIT", NotificationManager.IMPORTANCE_MIN).apply {
+                setShowBadge(false)
+                enableLights(false)
+                enableVibration(false)
+                lockscreenVisibility = Notification.VISIBILITY_SECRET
+            }
             nm.createNotificationChannel(chan)
         }
-        val notif: Notification = NotificationCompat.Builder(this, chanId)
-            .setContentTitle("VIT Mobile 起動中")
-            .setContentText(
-                if (Prefs.getTriggerMode(this) == Prefs.TRIGGER_ZONE)
-                    "起動ゾーンをダブルタップで音声入力"
-                else "マイクアイコンタップで音声入力"
-            )
-            .setSmallIcon(R.drawable.ic_mic)
-            .setOngoing(true)
-            .build()
+        try { nm.deleteNotificationChannel("vit_overlay") } catch (_: Exception) {}
+        val notif = buildNotification(false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 1, notif,
@@ -128,6 +136,40 @@ class OverlayService : Service() {
         } else {
             startForeground(1, notif)
         }
+    }
+
+    /**
+     * 録音中は通知に「取り消し」ボタンを出す。
+     * One Hand Operation+ のジェスチャー枠は埋まっているので、取り消しは枠を使わない経路で出す
+     * （通知を下ろして1タップ／音量ダウン2回押し）。
+     */
+    private fun buildNotification(recording: Boolean): Notification {
+        val b = NotificationCompat.Builder(this, "vit_overlay_min")
+            .setContentTitle(if (recording) "録音中" else "VIT")
+            .setContentText(if (recording) "取り消し: このボタン / 音量ダウン2回押し" else null)
+            .setSmallIcon(R.drawable.ic_mic)
+            .setOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setPriority(
+                if (recording) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_MIN
+            )
+        if (recording) {
+            val cancel = android.app.PendingIntent.getService(
+                this, 11,
+                Intent(this, OverlayService::class.java).setAction(ACTION_CANCEL),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            b.addAction(R.drawable.ic_mic, "取り消し", cancel)
+        }
+        return b.build()
+    }
+
+    private fun updateNotification(recording: Boolean) {
+        try {
+            getSystemService(NotificationManager::class.java)
+                .notify(1, buildNotification(recording))
+        } catch (_: Exception) {}
     }
 
     private fun setupOverlay() {
@@ -617,6 +659,7 @@ class OverlayService : Service() {
             micButton.imageTintList = ColorStateList.valueOf(navy)
             updateZoneVisual()
             startLevelMeter()
+            updateNotification(true)
             buzz(40)
             showStatus(if (feedback) "feedback" else "rec")
         }
@@ -629,6 +672,7 @@ class OverlayService : Service() {
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
         stopLevelMeter()
+        updateNotification(false)
         releaseStripsIfPassive()
         updateZoneVisual()
         buzz(20, 60, 20)
@@ -640,17 +684,26 @@ class OverlayService : Service() {
         }
     }
 
+    /**
+     * 取り消し = **入力欄には入れない**が、喋った内容は認識して履歴に残す。
+     * 「キャンセルしても中身はアプリから拾えると助かる」（駿平 2026-08-13）。
+     */
     private fun cancelRecording() {
+        if (!isRecording) return
         isRecording = false
         isFeedback = false
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
         stopLevelMeter()
+        updateNotification(false)
         releaseStripsIfPassive()
         updateZoneVisual()
         buzz(120)
-        hideStatus()
-        recorder?.cancel()
+        showStatus("busy")
+        recorder?.stopAndTranscribe { text ->
+            hideStatus()
+            if (!text.isNullOrBlank()) Prefs.addHistory(this, text)
+        }
     }
 
     // ==================== 状態表示（画面最上部の細いライン） ====================

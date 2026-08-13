@@ -402,6 +402,15 @@
             android:backgroundTint="#FFF0C040" />
 
         <Button
+            android:id="@+id/btnHistory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="喋った内容の一覧（タップでコピー）"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
+
+        <Button
             android:id="@+id/btnStopOverlay"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
