@@ -54,15 +54,13 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "ショートカットを保存しました", Toast.LENGTH_SHORT).show()
         }
 
-        // 起動方法: 透明ゾーン（既定） ⇔ 常時表示マイク
-        b.zoneModeSwitch.isChecked = Prefs.getTriggerMode(this) == Prefs.TRIGGER_ZONE
+        // 画面のダブルタップで起動するか（既定OFF。ジェスチャー起動が主役）
+        b.zoneModeSwitch.isChecked = Prefs.isScreenTrigger(this)
         b.zoneModeSwitch.setOnCheckedChangeListener { _, checked ->
-            Prefs.setTriggerMode(this, if (checked) Prefs.TRIGGER_ZONE else Prefs.TRIGGER_MIC)
+            Prefs.setScreenTrigger(this, checked)
             if (isOverlayRunning()) {
-                startForegroundService(
-                    Intent(this, OverlayService::class.java)
-                        .setAction(OverlayService.ACTION_RELOAD_TRIGGER)
-                )
+                stopService(Intent(this, OverlayService::class.java))
+                startForegroundService(Intent(this, OverlayService::class.java))
             }
         }
 

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 取り消し・失敗の合図。文字を出さずに色だけで伝える -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:gravity="center"
+        android:width="12dp"
+        android:height="12dp">
+        <shape android:shape="oval">
+            <solid android:color="#FF8A8F9E" />
+            <stroke android:width="2dp" android:color="#66000000" />
+        </shape>
+    </item>
+</layer-list>

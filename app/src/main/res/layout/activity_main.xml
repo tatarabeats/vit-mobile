@@ -176,7 +176,7 @@
             android:id="@+id/zoneModeSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="画面のキワをダブルタップで起動（何も表示しない）"
+            android:text="画面のダブルタップでも起動する（他アプリと干渉するので既定OFF）"
             android:textColor="#FFFFFFFF"
             android:textSize="15sp" />
 

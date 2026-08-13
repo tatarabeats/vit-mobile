@@ -213,6 +213,8 @@ class OverlayService : Service() {
     //   録音中のタップ … 確定して挿入 / 録音中の2回タップ … キャンセル
     //   帯そのものは常に FLAG_NOT_TOUCHABLE。見せるだけで、触れる窓は一切置かない
     private fun setupHotZone(overlayType: Int) {
+        // 画面ダブルタップは既定OFF。ジェスチャー（TriggerActivity）が主役
+        if (!Prefs.isScreenTrigger(this)) return
         setupWatcher(overlayType)
         showZoneHint(overlayType, 3000)
     }
@@ -318,7 +320,7 @@ class OverlayService : Service() {
                 }, 320)
             } else if (tapCount == 2) {
                 cancelRecording()
-                flashStatus("キャンセルした")
+                flashStatus("idle")
             }
             return
         }
@@ -619,7 +621,7 @@ class OverlayService : Service() {
             startLevelMeter()
             if (triggerMode == Prefs.TRIGGER_ZONE) attachStrips()
             buzz(40)
-            showStatus(if (feedback) "フィードバック録音中 — タップで送信" else "録音中 — タップで確定", feedback)
+            showStatus(if (feedback) "feedback" else "rec")
         }
     }
 
@@ -633,10 +635,10 @@ class OverlayService : Service() {
         releaseStripsIfPassive()
         updateZoneVisual()
         buzz(20, 60, 20)
-        showStatus(if (wasFeedback) "送信中…" else "変換中…", wasFeedback)
+        showStatus("busy")
         recorder?.stopAndTranscribe { text ->
             hideStatus()
-            if (text.isNullOrBlank()) { flashStatus("聞き取れなかった"); return@stopAndTranscribe }
+            if (text.isNullOrBlank()) { flashStatus("idle"); buzz(200); return@stopAndTranscribe }
             if (wasFeedback) Feedback.submit(this, text) else copyAndPaste(text)
         }
     }
@@ -654,53 +656,72 @@ class OverlayService : Service() {
         recorder?.cancel()
     }
 
-    // ==================== 状態表示（自前オーバーレイ） ====================
-    // Toast はシステムの待ち行列を通るので、混んでいると数秒遅れて出る。
-    // 録音中かどうかは即座に分からないと使えないので、自分のウィンドウで出す。
+    // ==================== 状態表示（文字を出さない） ====================
+    // 「キャンセルした」「聞き取れなかった」等を文字で出すのは邪魔（駿平 2026-08-13）。
+    // 状態は **色と動きとバイブ** だけで伝える。
+    //   録音中   … 赤いドットが脈動
+    //   解析中   … 金のドットがゆっくり明滅
+    //   取り消し … 灰色に一瞬光って消える（＋長いバイブ）
+    //   失敗     … 灰色（＋長いバイブ）
 
-    private fun showStatus(msg: String, feedback: Boolean) {
+    private var statusPulse: android.animation.ValueAnimator? = null
+
+    private fun showStatus(state: String) {
         mainHandler.post {
             if (statusView == null) buildStatusView()
-            statusText?.text = msg
-            statusDot?.setBackgroundResource(
-                if (feedback) R.drawable.zone_feedback else R.drawable.zone_recording
-            )
+            val res = when (state) {
+                "rec" -> R.drawable.zone_recording
+                "feedback" -> R.drawable.zone_feedback
+                "busy" -> R.drawable.zone_feedback
+                else -> R.drawable.zone_idle
+            }
+            statusDot?.setBackgroundResource(res)
             statusView?.visibility = View.VISIBLE
+            statusPulse?.cancel()
+            if (state == "busy") {
+                // 解析中はゆっくり明滅させて「動いている」ことだけ伝える
+                statusPulse = android.animation.ValueAnimator.ofFloat(0.3f, 1f).apply {
+                    duration = 600
+                    repeatMode = android.animation.ValueAnimator.REVERSE
+                    repeatCount = android.animation.ValueAnimator.INFINITE
+                    addUpdateListener { statusDot?.alpha = it.animatedValue as Float }
+                    start()
+                }
+            } else {
+                statusDot?.alpha = 1f
+            }
         }
     }
 
     private fun hideStatus() {
-        mainHandler.post { statusView?.visibility = View.GONE }
+        mainHandler.post {
+            statusPulse?.cancel()
+            statusPulse = null
+            statusDot?.alpha = 1f
+            statusView?.visibility = View.GONE
+        }
     }
 
-    /** 一瞬だけ出して自動で消す（エラー通知用） */
-    private fun flashStatus(msg: String) {
-        showStatus(msg, false)
-        mainHandler.postDelayed({ hideStatus() }, 1500)
+    /** 一瞬だけ出して自動で消す（取り消し・失敗の合図。文字は出さない） */
+    private fun flashStatus(state: String) {
+        showStatus(state)
+        mainHandler.postDelayed({ hideStatus() }, 700)
     }
 
     private fun buildStatusView() {
-        val padH = (density * 16).toInt()
-        val padV = (density * 10).toInt()
+        val pad = (density * 10).toInt()
         val row = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER
             setBackgroundResource(R.drawable.history_card_bg)
-            setPadding(padH, padV, padH, padV)
+            setPadding(pad, pad, pad, pad)
         }
-        val dotSize = (density * 12).toInt()
+        val dotSize = (density * 14).toInt()
         val dot = View(this).apply {
-            layoutParams = android.widget.LinearLayout.LayoutParams(dotSize, dotSize).apply {
-                rightMargin = (density * 10).toInt()
-            }
+            layoutParams = android.widget.LinearLayout.LayoutParams(dotSize, dotSize)
             setBackgroundResource(R.drawable.zone_recording)
         }
-        val tv = android.widget.TextView(this).apply {
-            setTextColor(Color.WHITE)
-            textSize = 14f
-        }
         row.addView(dot)
-        row.addView(tv)
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
@@ -711,10 +732,10 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = (density * 72).toInt()
+            y = (density * 64).toInt()
         }
         statusView = row
-        statusText = tv
+        statusText = null
         statusDot = dot
         try { wm.addView(row, params) } catch (_: Exception) { statusView = null }
     }
@@ -746,7 +767,7 @@ class OverlayService : Service() {
     private fun showHistoryCard() {
         hideHistoryCard()
         val items = Prefs.getHistory(this)
-        if (items.isEmpty()) { flashStatus("履歴はまだ無い"); return }
+        if (items.isEmpty()) { flashStatus("idle"); return }
 
         val pad = (density * 14).toInt()
         val list = android.widget.LinearLayout(this).apply {

@@ -10,4 +10,11 @@
         <item name="android:textColorSecondary">#CCFFFFFF</item>
         <item name="android:textColorHint">#80FFFFFF</item>
     </style>
+
+    <!-- ジェスチャーから叩く透明な入口。画面には一切出さない -->
+    <style name="Theme.VitTrigger" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowNoDisplay">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

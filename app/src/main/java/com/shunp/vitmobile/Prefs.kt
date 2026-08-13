@@ -19,6 +19,7 @@ object Prefs {
     private const val KEY_VOLUME_TRIGGER = "volume_trigger"
     private const val KEY_DTAP_MS = "double_tap_ms"
     private const val KEY_EXCLUDED = "excluded_packages"
+    private const val KEY_SCREEN_TRIGGER = "screen_trigger"
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
     const val TRIGGER_ZONE = "zone"
@@ -96,6 +97,20 @@ object Prefs {
         return getExcludedPackages(ctx).lineSequence()
             .map { it.trim() }
             .any { it.isNotEmpty() && it.equals(pkg, ignoreCase = true) }
+    }
+
+    /**
+     * 画面のダブルタップで起動するか。**既定OFF**（2026-08-13）。
+     * 他アプリのダブルタップ動作との干渉が多く、実用に耐えなかった。
+     * 通常は One Hand Operation+ 等のジェスチャーから TriggerActivity を叩く。
+     */
+    fun isScreenTrigger(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SCREEN_TRIGGER, false)
+
+    fun setScreenTrigger(ctx: Context, on: Boolean) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_SCREEN_TRIGGER, on).apply()
     }
 
     fun getGithubToken(ctx: Context): String? =

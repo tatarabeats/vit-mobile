@@ -30,6 +30,24 @@
             </intent-filter>
         </activity>
 
+        <!-- One Hand Operation+ 等のジェスチャーから「アプリを開く」で選べる透明な入口。
+             開いても何も表示せず、録音の開始/確定だけを行う -->
+        <activity
+            android:name=".TriggerActivity"
+            android:exported="true"
+            android:label="@string/trigger_label"
+            android:icon="@mipmap/ic_launcher"
+            android:theme="@style/Theme.VitTrigger"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:noHistory="true"
+            android:launchMode="singleInstance">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".OverlayService"
             android:exported="false"
