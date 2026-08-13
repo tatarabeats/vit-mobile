@@ -48,6 +48,22 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".FeedbackTriggerActivity"
+            android:exported="true"
+            android:label="@string/feedback_trigger_label"
+            android:icon="@mipmap/ic_launcher"
+            android:theme="@style/Theme.VitTrigger"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:noHistory="true"
+            android:launchMode="singleInstance">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".OverlayService"
             android:exported="false"

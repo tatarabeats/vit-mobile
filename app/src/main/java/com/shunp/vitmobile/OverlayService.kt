@@ -37,6 +37,8 @@ class OverlayService : Service() {
         const val ACTION_RELOAD_TRIGGER = "com.shunp.vitmobile.RELOAD_TRIGGER"
         /** 音量キー2回押しなど、画面外からの起動 */
         const val ACTION_TRIGGER = "com.shunp.vitmobile.TRIGGER"
+        /** フィードバック録音のトグル */
+        const val ACTION_TRIGGER_FEEDBACK = "com.shunp.vitmobile.TRIGGER_FEEDBACK"
 
         /**
           * 左右のキワの帯の幅。タッチを横取りしないので、広めに取っても下のアプリに影響しない。
@@ -60,7 +62,6 @@ class OverlayService : Service() {
     private var statusView: View? = null
     private var statusText: android.widget.TextView? = null
     private var statusDot: View? = null
-    private var historyCard: View? = null
     private var tapCount = 0
     private var lastTapAt = 0L
     private var lastTapX = -9999f
@@ -95,6 +96,9 @@ class OverlayService : Service() {
             ACTION_EDIT_ZONE -> enterZoneEditMode()
             ACTION_RELOAD_TRIGGER -> reloadTrigger()
             ACTION_TRIGGER -> onExternalTrigger()
+            ACTION_TRIGGER_FEEDBACK -> {
+                if (isRecording) stopRecording() else startRecording(feedback = true)
+            }
         }
         return START_STICKY
     }
@@ -331,10 +335,6 @@ class OverlayService : Service() {
             }
             3 -> {
                 cancelRecording()
-                showHistoryCard()
-            }
-            4 -> {
-                hideHistoryCard()
                 startRecording(feedback = true)
             }
         }
@@ -438,7 +438,6 @@ class OverlayService : Service() {
 
     private fun removeAllViews() {
         stopLevelMeter()
-        hideHistoryCard()
         detachStrips()
         watcherView?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
         watcherView = null
@@ -619,7 +618,6 @@ class OverlayService : Service() {
             micButton.imageTintList = ColorStateList.valueOf(navy)
             updateZoneVisual()
             startLevelMeter()
-            if (triggerMode == Prefs.TRIGGER_ZONE) attachStrips()
             buzz(40)
             showStatus(if (feedback) "feedback" else "rec")
         }
@@ -656,48 +654,64 @@ class OverlayService : Service() {
         recorder?.cancel()
     }
 
-    // ==================== 状態表示（文字を出さない） ====================
-    // 「キャンセルした」「聞き取れなかった」等を文字で出すのは邪魔（駿平 2026-08-13）。
-    // 状態は **色と動きとバイブ** だけで伝える。
-    //   録音中   … 赤いドットが脈動
-    //   解析中   … 金のドットがゆっくり明滅
-    //   取り消し … 灰色に一瞬光って消える（＋長いバイブ）
-    //   失敗     … 灰色（＋長いバイブ）
+    // ==================== 状態表示（画面最上部の細いライン） ====================
+    // 文字も点も画面の中に出さない（駿平 2026-08-13）。
+    // 画面の一番上のフチに 3dp のラインを1本だけ引き、
+    //   録音中 … 赤いラインが声の大きさで左右に伸縮する
+    //   解析中 … 金のラインがゆっくり明滅する
+    //   取り消し/失敗 … 灰色に一瞬光って消える
+    // 端末のフチなので、アプリの表示とはほぼ重ならない。
 
     private var statusPulse: android.animation.ValueAnimator? = null
+    private var statusState = "idle"
 
     private fun showStatus(state: String) {
         mainHandler.post {
+            statusState = state
             if (statusView == null) buildStatusView()
-            val res = when (state) {
-                "rec" -> R.drawable.zone_recording
-                "feedback" -> R.drawable.zone_feedback
-                "busy" -> R.drawable.zone_feedback
-                else -> R.drawable.zone_idle
-            }
-            statusDot?.setBackgroundResource(res)
+            statusDot?.setBackgroundColor(
+                when (state) {
+                    "rec" -> Color.parseColor("#FFE04040")
+                    "feedback" -> gold
+                    "busy" -> gold
+                    else -> Color.parseColor("#FF8A8F9E")
+                }
+            )
             statusView?.visibility = View.VISIBLE
             statusPulse?.cancel()
             if (state == "busy") {
-                // 解析中はゆっくり明滅させて「動いている」ことだけ伝える
-                statusPulse = android.animation.ValueAnimator.ofFloat(0.3f, 1f).apply {
-                    duration = 600
+                statusPulse = android.animation.ValueAnimator.ofFloat(0.25f, 1f).apply {
+                    duration = 500
                     repeatMode = android.animation.ValueAnimator.REVERSE
                     repeatCount = android.animation.ValueAnimator.INFINITE
-                    addUpdateListener { statusDot?.alpha = it.animatedValue as Float }
+                    addUpdateListener { statusView?.alpha = it.animatedValue as Float }
                     start()
                 }
+                setStatusWidth(1f)
             } else {
-                statusDot?.alpha = 1f
+                statusView?.alpha = 1f
             }
         }
+    }
+
+    /** ラインの長さを 0..1 で決める（録音中は声の大きさに追従） */
+    private fun setStatusWidth(ratio: Float) {
+        val v = statusView ?: return
+        val p = v.layoutParams as? WindowManager.LayoutParams ?: return
+        val minW = (density * 40).toInt()
+        val maxW = (screenWidth * 0.7f).toInt()
+        val w = (minW + (maxW - minW) * ratio.coerceIn(0f, 1f)).toInt()
+        if (p.width == w) return
+        p.width = w
+        try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
     }
 
     private fun hideStatus() {
         mainHandler.post {
             statusPulse?.cancel()
             statusPulse = null
-            statusDot?.alpha = 1f
+            statusState = "idle"
+            statusView?.alpha = 1f
             statusView?.visibility = View.GONE
         }
     }
@@ -705,39 +719,29 @@ class OverlayService : Service() {
     /** 一瞬だけ出して自動で消す（取り消し・失敗の合図。文字は出さない） */
     private fun flashStatus(state: String) {
         showStatus(state)
-        mainHandler.postDelayed({ hideStatus() }, 700)
+        mainHandler.postDelayed({ hideStatus() }, 600)
     }
 
     private fun buildStatusView() {
-        val pad = (density * 10).toInt()
-        val row = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setBackgroundResource(R.drawable.history_card_bg)
-            setPadding(pad, pad, pad, pad)
+        val line = View(this).apply {
+            setBackgroundColor(Color.parseColor("#FFE04040"))
         }
-        val dotSize = (density * 14).toInt()
-        val dot = View(this).apply {
-            layoutParams = android.widget.LinearLayout.LayoutParams(dotSize, dotSize)
-            setBackgroundResource(R.drawable.zone_recording)
-        }
-        row.addView(dot)
-
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            (density * 120).toInt(), (density * 3).toInt(),
             overlayType(),
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            y = (density * 64).toInt()
+            y = 0
         }
-        statusView = row
+        statusView = line
         statusText = null
-        statusDot = dot
-        try { wm.addView(row, params) } catch (_: Exception) { statusView = null }
+        statusDot = line
+        try { wm.addView(line, params) } catch (_: Exception) { statusView = null }
     }
 
     private fun toast(msg: String) {
@@ -764,88 +768,14 @@ class OverlayService : Service() {
 
     // ==================== 履歴カード（3回タップ） ====================
 
-    private fun showHistoryCard() {
-        hideHistoryCard()
-        val items = Prefs.getHistory(this)
-        if (items.isEmpty()) { flashStatus("idle"); return }
-
-        val pad = (density * 14).toInt()
-        val list = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
-        }
-        for ((_, text) in items) {
-            val row = android.widget.TextView(this).apply {
-                this.text = if (text.length > 90) text.take(90) + "…" else text
-                setTextColor(Color.WHITE)
-                textSize = 15f
-                setPadding(pad / 2, pad / 2, pad / 2, pad / 2)
-                setOnClickListener {
-                    hideHistoryCard()
-                    copyAndPaste(text)
-                    buzz(30)
-                }
-            }
-            list.addView(row)
-        }
-        // 過去まで遡れるようスクロールさせる（画面の6割までで打ち止め）
-        val card = android.widget.ScrollView(this).apply {
-            setBackgroundResource(R.drawable.history_card_bg)
-            isVerticalScrollBarEnabled = true
-            addView(list)
-        }
-        // カードの外を触ったら閉じる（閉じるボタンを押させない）。
-        // FLAG_WATCH_OUTSIDE_TOUCH で、外側のタップは下のアプリに通しつつ通知だけ受け取る
-        card.setOnTouchListener { _, ev ->
-            if (ev.action == MotionEvent.ACTION_OUTSIDE) { hideHistoryCard(); true } else false
-        }
-
-        val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        else
-            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
-        val cardW = minOf((density * 300).toInt(), screenWidth - (density * 24).toInt())
-        val zp = zoneParams
-        // 入力欄のフォーカスを奪わないよう NOT_FOCUSABLE のまま出す（挿入先が変わらない）
-        val maxH = (screenHeight * 0.6f).toInt()
-        val params = WindowManager.LayoutParams(
-            cardW, maxH,
-            overlayType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = ((zp?.x ?: screenWidth) - cardW).coerceIn(0, maxOf(0, screenWidth - cardW))
-            y = (zp?.y ?: (screenHeight / 2)).coerceIn(0, maxOf(0, screenHeight - (density * 200).toInt()))
-        }
-        historyCard = card
-        try { wm.addView(card, params) } catch (_: Exception) { historyCard = null }
-        // 放置されても邪魔にならないよう自動で消す（遡って読む時間を考えて長めに）
-        mainHandler.postDelayed({ hideHistoryCard() }, 20000)
-    }
-
-    private fun hideHistoryCard() {
-        historyCard?.let { c -> try { wm.removeView(c) } catch (_: Exception) {} }
-        historyCard = null
-    }
-
-    // ==================== 録音中の音量表示 ====================
-
     private val levelTick = object : Runnable {
         override fun run() {
             if (!isRecording) return
-            val ampNow = (recorder?.amplitude() ?: 0).coerceIn(0, 12000) / 12000f
-            statusDot?.alpha = 0.35f + 0.65f * ampNow
-            if (zoneViews.isNotEmpty() && !zoneEditMode) {
-                // maxAmplitude(0-32767) を 0.45〜1.0 の濃さに割り当てる。
-                // 声を出している間だけドットが濃くなる＝拾えているのが目で分かる
-                val amp = (recorder?.amplitude() ?: 0).coerceIn(0, 12000) / 12000f
-                val a = 0.45f + 0.55f * amp
-                zoneViews.forEach { it.alpha = a }
-            }
-            mainHandler.postDelayed(this, 100)
+            // maxAmplitude(0-32767) をラインの長さに割り当てる。
+            // 声を出している間だけ伸びるので、拾えているのが一目で分かる
+            val amp = (recorder?.amplitude() ?: 0).coerceIn(0, 12000) / 12000f
+            setStatusWidth(0.15f + 0.85f * amp)
+            mainHandler.postDelayed(this, 80)
         }
     }
 
@@ -895,8 +825,7 @@ class OverlayService : Service() {
             // 帯は新しい画面サイズで作り直す（回転で縦横が入れ替わるため位置計算をやり直す）
             screenWidth = newWidth
             screenHeight = newHeight
-            hideHistoryCard()
-            detachStrips()
+                detachStrips()
             watcherView?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
             watcherView = null
             setupHotZone(overlayType())

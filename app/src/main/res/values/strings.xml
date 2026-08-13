@@ -3,4 +3,5 @@
     <string name="accessibility_service_label">VIT Mobile テキスト挿入</string>
     <string name="accessibility_service_description">音声認識した結果をフォーカス中の入力欄に貼り付けます</string>
     <string name="trigger_label">VIT 録音</string>
+    <string name="feedback_trigger_label">VIT フィードバック</string>
 </resources>
