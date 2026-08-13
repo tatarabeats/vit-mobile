@@ -193,12 +193,14 @@ class InputAccessibilityService : AccessibilityService() {
         // attempt 1: ACTION_PASTE
         if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
             Log.d(TAG, "ACTION_PASTE ok")
+            maybeSendEnter(node)
             return
         }
         // attempt 2: focus → paste
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
             Log.d(TAG, "ACTION_PASTE after focus ok")
+            maybeSendEnter(node)
             return
         }
         // attempt 3: ACTION_SET_TEXT（既存テキスト + 認識テキスト）
@@ -212,6 +214,29 @@ class InputAccessibilityService : AccessibilityService() {
         }
         val r3 = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
         Log.d(TAG, "ACTION_SET_TEXT result=$r3 combinedLen=${combined.length}")
+        maybeSendEnter(node)
+    }
+
+    /**
+     * 対象アプリなら挿入後に Enter を送って送信まで済ませる。
+     * IME の実行キーを押すのと同じ ACTION_IME_ENTER を使う（Android 11+）。
+     */
+    private fun maybeSendEnter(node: AccessibilityNodeInfo) {
+        val pkg = node.packageName?.toString() ?: currentPackage()
+        if (!Prefs.isAutoEnter(this, pkg)) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        // 貼り付けが反映されてから送る
+        android.os.Handler(mainLooper).postDelayed({
+            try {
+                val target = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: node
+                val ok = target.performAction(
+                    AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id
+                )
+                Log.d(TAG, "auto enter pkg=$pkg result=$ok")
+            } catch (e: Exception) {
+                Log.d(TAG, "auto enter failed: ${e.message}")
+            }
+        }, 250)
     }
 
     private fun findFocusedNode(): AccessibilityNodeInfo? {

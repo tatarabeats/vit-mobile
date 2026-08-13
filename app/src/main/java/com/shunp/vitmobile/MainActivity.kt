@@ -88,6 +88,12 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "除外アプリを保存しました", Toast.LENGTH_SHORT).show()
         }
 
+        b.autoEnterInput.setText(Prefs.getAutoEnterPackages(this))
+        b.saveAutoEnter.setOnClickListener {
+            Prefs.setAutoEnterPackages(this, b.autoEnterInput.text.toString())
+            Toast.makeText(this, "自動Enterの対象を保存しました", Toast.LENGTH_SHORT).show()
+        }
+
         b.btnEditZone.setOnClickListener {
             if (Prefs.getTriggerMode(this) != Prefs.TRIGGER_ZONE) {
                 Toast.makeText(this, "起動ゾーンをONにしてから確認してください", Toast.LENGTH_SHORT).show()

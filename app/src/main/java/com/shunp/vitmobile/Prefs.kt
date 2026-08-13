@@ -20,6 +20,7 @@ object Prefs {
     private const val KEY_DTAP_MS = "double_tap_ms"
     private const val KEY_EXCLUDED = "excluded_packages"
     private const val KEY_SCREEN_TRIGGER = "screen_trigger"
+    private const val KEY_AUTO_ENTER = "auto_enter_packages"
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
     const val TRIGGER_ZONE = "zone"
@@ -111,6 +112,34 @@ object Prefs {
     fun setScreenTrigger(ctx: Context, on: Boolean) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_SCREEN_TRIGGER, on).apply()
+    }
+
+    /**
+     * 挿入した後に Enter まで送るアプリ（パッケージ名・改行区切り）。
+     * AIチャットは「喋る→挿入→送信」まで一息で終わらせたい（駿平 2026-08-13）。
+     * 全アプリ一律にすると、検索欄や本文途中で勝手に確定してしまうのでアプリ単位にする。
+     */
+    private val DEFAULT_AUTO_ENTER = listOf(
+        "com.anthropic.claude",
+        "com.openai.chatgpt",
+        "com.google.android.apps.bard",
+        "ai.perplexity.app.android",
+    ).joinToString("\n")
+
+    fun getAutoEnterPackages(ctx: Context): String =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_AUTO_ENTER, DEFAULT_AUTO_ENTER) ?: DEFAULT_AUTO_ENTER
+
+    fun setAutoEnterPackages(ctx: Context, text: String) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_AUTO_ENTER, text).apply()
+    }
+
+    fun isAutoEnter(ctx: Context, pkg: String?): Boolean {
+        if (pkg.isNullOrBlank()) return false
+        return getAutoEnterPackages(ctx).lineSequence()
+            .map { it.trim() }
+            .any { it.isNotEmpty() && it.equals(pkg, ignoreCase = true) }
     }
 
     fun getGithubToken(ctx: Context): String? =
