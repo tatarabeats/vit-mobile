@@ -80,8 +80,7 @@ object Prefs {
         "com.samsung.android.gallery3d",
         "com.netflix.mediaclient",
         "com.amazon.avod.thirdpartyclient",
-    ).joinToString("
-")
+    ).joinToString("\n")
 
     fun getExcludedPackages(ctx: Context): String =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
