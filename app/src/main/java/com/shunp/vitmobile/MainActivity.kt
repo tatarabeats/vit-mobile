@@ -189,16 +189,14 @@ class MainActivity : AppCompatActivity() {
             .distinctBy { it.second }
             .sortedBy { it.first }
         if (apps.isEmpty()) return
-        val labels = apps.map { "${it.first}
-${it.second}" }.toTypedArray()
+        val labels = apps.map { "${it.first}\n${it.second}" }.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle("送信まで行うアプリを追加")
             .setItems(labels) { _, which ->
                 val pkg = apps[which].second
                 val cur = b.autoEnterInput.text.toString().trimEnd()
                 if (!cur.lineSequence().any { it.trim() == pkg }) {
-                    b.autoEnterInput.setText(if (cur.isBlank()) pkg else "$cur
-$pkg")
+                    b.autoEnterInput.setText(if (cur.isBlank()) pkg else "$cur\n$pkg")
                 }
                 Prefs.setAutoEnterPackages(this, b.autoEnterInput.text.toString())
                 Toast.makeText(this, "${apps[which].first} を追加した", Toast.LENGTH_SHORT).show()

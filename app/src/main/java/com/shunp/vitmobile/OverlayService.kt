@@ -512,7 +512,6 @@ class OverlayService : Service() {
                 longPressed = true
                 if (isRecording) {
                     cancelRecording()
-                    Toast.makeText(this, "キャンセルしました", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -744,8 +743,9 @@ class OverlayService : Service() {
         try { wm.addView(line, params) } catch (_: Exception) { statusView = null }
     }
 
+    /** 使用中に文字は出さない方針。残っていた経路はログだけにする（駿平 2026-08-13） */
     private fun toast(msg: String) {
-        mainHandler.post { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
+        android.util.Log.d("VIT", msg)
     }
 
     /** 見えないゾーンを触った事を指で分かるようにする（画面を見なくても判る） */

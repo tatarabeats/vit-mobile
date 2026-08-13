@@ -368,10 +368,9 @@ class VoiceRecorder(private val ctx: Context) {
         out
     }
 
+    /** 使用中に文字は出さない。失敗はラインの色とバイブで伝える */
     private fun toast(msg: String) {
-        scope.launch(Dispatchers.Main) {
-            Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
-        }
+        android.util.Log.d("VIT", msg)
     }
 
     fun release() {
