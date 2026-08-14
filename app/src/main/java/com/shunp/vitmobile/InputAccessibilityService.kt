@@ -322,16 +322,14 @@ class InputAccessibilityService : AccessibilityService() {
         try {
             val f = java.io.File(filesDir, "autosend.log")
             if (f.length() > 40_000) f.writeText("")
-            f.appendText(line + "
-")
+            f.appendText(line + "\n")
         } catch (_: Exception) {}
     }
 
     /** 送信ボタンが見つからない時、画面にある押せる要素を全部書き出す */
     private fun dumpCandidates(root: AccessibilityNodeInfo?) {
         if (root == null) return
-        val sb = StringBuilder("---- clickable dump ----
-")
+        val sb = StringBuilder("---- clickable dump ----\n")
         fun walk(n: AccessibilityNodeInfo?) {
             if (n == null) return
             if (n.isClickable) {
@@ -343,8 +341,7 @@ class InputAccessibilityService : AccessibilityService() {
                     .append(" id=").append(n.viewIdResourceName)
                     .append(" enabled=").append(n.isEnabled)
                     .append(" rect=").append(r.flattenToString())
-                    .append("
-")
+                    .append("\n")
             }
             for (i in 0 until n.childCount) walk(n.getChild(i))
         }
