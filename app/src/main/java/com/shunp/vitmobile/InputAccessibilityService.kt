@@ -196,28 +196,41 @@ class InputAccessibilityService : AccessibilityService() {
             return
         }
 
-        // クリップボードを使わなくなったので、テキストを渡された時は SET_TEXT を先に使う。
-        // （ACTION_PASTE はクリップボードの中身を貼るので、古い内容が入ってしまう）
-        if (providedText != null) {
-            if (setTextOnNode(node, providedText)) {
-                maybeSendEnter(node)
-                return
-            }
+        // まず SET_TEXT。クリップボードを汚さずに書き込める
+        if (providedText != null && setTextOnNode(node, providedText)) {
+            maybeSendEnter(node)
+            return
         }
 
-        // テキストが渡されていない場合のみクリップボード経由
-        if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
-            Log.d(TAG, "ACTION_PASTE ok")
+        // SET_TEXT を受け付けない入力欄がある（Brave の検索欄など・2026-08-14）。
+        // その時だけクリップボード経由で貼り、直後に元の内容へ戻す。
+        if (pasteViaClipboard(node, text)) {
             maybeSendEnter(node)
             return
         }
-        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-        if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
-            Log.d(TAG, "ACTION_PASTE after focus ok")
-            maybeSendEnter(node)
-            return
+        Log.d(TAG, "insert failed on ${node.className}")
+    }
+
+    /** クリップボードに一時的に置いて ACTION_PASTE で貼る。終わったら元に戻す */
+    private fun pasteViaClipboard(node: AccessibilityNodeInfo, text: String): Boolean {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return false
+        val backup = try { cm.primaryClip } catch (_: Exception) { null }
+        return try {
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("VIT", text))
+            node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            var ok = node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            if (!ok) {
+                Thread.sleep(80)
+                ok = node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            }
+            Log.d(TAG, "clipboard paste ok=$ok")
+            android.os.Handler(mainLooper).postDelayed({
+                try { if (backup != null) cm.setPrimaryClip(backup) } catch (_: Exception) {}
+            }, 800)
+            ok
+        } catch (_: Exception) {
+            false
         }
-        if (setTextOnNode(node, text)) maybeSendEnter(node)
     }
 
     /** 既存テキストの後ろに追記する形で入力欄へ書き込む */
