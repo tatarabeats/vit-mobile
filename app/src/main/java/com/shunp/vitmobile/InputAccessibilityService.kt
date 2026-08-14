@@ -182,7 +182,10 @@ class InputAccessibilityService : AccessibilityService() {
         // フォーカスが当たっている入力欄にだけ入れる。
         // 以前は画面内から入力欄を探し回っていたため、ブラウザを開いているだけで
         // 検索欄に勝手に入っていた。選んでいない場所には入れない（駿平 2026-08-13）。
-        val node = findFocusedNode()
+        // ブラウザは、ジェスチャー起動で一瞬フォーカスが外れると検索欄のフォーカスも落ちる。
+        // その場合だけ「録音前に触っていた入力欄」を同じアプリの中から拾い直す。
+        // 別アプリには絶対に入れない（駿平 2026-08-14）。
+        val node = findFocusedNode() ?: recoverLastInput()
         if (node == null) {
             Log.d(TAG, "no node found")
             return
@@ -434,6 +437,22 @@ class InputAccessibilityService : AccessibilityService() {
             }
             .minByOrNull { (_, r) -> r.left }
             ?.first
+    }
+
+    /**
+     * 直前に触っていた入力欄を拾い直す。
+     * 条件は「今前面にいるアプリが、その入力欄を覚えた時と同じアプリであること」だけ。
+     * これを外すと、別アプリの検索欄に勝手に入る事故に戻る。
+     */
+    private fun recoverLastInput(): AccessibilityNodeInfo? {
+        val pkg = currentPackage() ?: return null
+        if (!pkg.equals(lastFocusedPackage ?: "", ignoreCase = true)) return null
+        val bounds = lastFocusedBounds ?: return null
+        val root = rootInActiveWindow ?: return null
+        val n = searchByBounds(root, bounds) ?: searchInput(root) ?: return null
+        n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        Log.d(TAG, "recovered last input in $pkg")
+        return n
     }
 
     private fun findFocusedNode(): AccessibilityNodeInfo? {

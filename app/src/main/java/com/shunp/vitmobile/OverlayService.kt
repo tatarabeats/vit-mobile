@@ -723,7 +723,7 @@ class OverlayService : Service() {
             statusState = state
             if (statusView == null) buildStatusView()
             val c = when (state) {
-                "rec" -> Color.parseColor("#FFE04040")
+                "rec" -> Color.parseColor("#FF4ECB8B")
                 "feedback" -> gold
                 "busy" -> gold
                 else -> Color.parseColor("#FF8A8F9E")
@@ -778,7 +778,7 @@ class OverlayService : Service() {
         val line = View(this).apply {
             background = android.graphics.drawable.GradientDrawable().apply {
                 cornerRadius = density * 2f
-                setColor(Color.parseColor("#FFE04040"))
+                setColor(Color.parseColor("#FF4ECB8B"))
             }
         }
         val params = WindowManager.LayoutParams(
