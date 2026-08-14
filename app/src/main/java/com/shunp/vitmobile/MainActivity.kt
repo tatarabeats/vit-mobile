@@ -96,6 +96,21 @@ class MainActivity : AppCompatActivity() {
 
         b.pickAutoEnter.setOnClickListener { pickAppForAutoEnter() }
 
+        b.btnAutoSendDiag.setOnClickListener {
+            val f = java.io.File(filesDir, "autosend.log")
+            val body = if (f.exists()) f.readText().takeLast(4000) else ""
+            AlertDialog.Builder(this)
+                .setTitle("自動送信の診断")
+                .setMessage(if (body.isBlank()) "まだ記録がありません" else body)
+                .setPositiveButton("コピー") { _, _ ->
+                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("VIT diag", body))
+                    Toast.makeText(this, "コピーした", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("消す") { _, _ -> try { f.delete() } catch (_: Exception) {} }
+                .show()
+        }
+
         b.btnEditZone.setOnClickListener {
             if (Prefs.getTriggerMode(this) != Prefs.TRIGGER_ZONE) {
                 Toast.makeText(this, "起動ゾーンをONにしてから確認してください", Toast.LENGTH_SHORT).show()

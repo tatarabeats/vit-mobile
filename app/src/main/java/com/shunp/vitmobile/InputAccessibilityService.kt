@@ -275,22 +275,81 @@ class InputAccessibilityService : AccessibilityService() {
                         AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id
                     )
                 ) {
-                    Log.d(TAG, "auto enter: ime_enter ok (attempt=$attempt) pkg=$pkg")
+                    diag("attempt=$attempt ime_enter ok")
                     return true
                 }
             } catch (_: Exception) {}
         }
 
-        // 2) 送信ボタンらしきものを押す
         val btn = findSendButton(root)
-        if (btn != null) {
-            val ok = btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            Log.d(TAG, "auto enter: click=$ok (attempt=$attempt) pkg=$pkg")
-            if (ok) return true
-        } else {
-            Log.d(TAG, "auto enter: send button not found (attempt=$attempt) pkg=$pkg")
+        if (btn == null) {
+            diag("attempt=$attempt send button not found")
+            if (attempt == 2) dumpCandidates(root)
+            return false
         }
-        return false
+        val r = Rect()
+        btn.getBoundsInScreen(r)
+
+        // 2) ノードのクリック
+        if (btn.isEnabled && btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            diag("attempt=$attempt node click ok rect=$r")
+            return true
+        }
+
+        // 3) 実際に指で触るのと同じタップ。
+        //    Compose 製アプリは ACTION_CLICK を無視することがあるので、こちらが最後の手段
+        val ok = tapAt(r.exactCenterX(), r.exactCenterY())
+        diag("attempt=$attempt gesture tap=$ok rect=$r enabled=${btn.isEnabled}")
+        return ok
+    }
+
+    private fun tapAt(x: Float, y: Float): Boolean {
+        return try {
+            val path = android.graphics.Path().apply { moveTo(x, y) }
+            val stroke = android.accessibilityservice.GestureDescription
+                .StrokeDescription(path, 0, 60)
+            dispatchGesture(
+                android.accessibilityservice.GestureDescription.Builder()
+                    .addStroke(stroke).build(),
+                null, null
+            )
+        } catch (_: Exception) { false }
+    }
+
+    /** 何が起きたかを端末内のファイルに残す（アプリの「自動送信の診断」で読める） */
+    private fun diag(line: String) {
+        Log.d(TAG, "auto enter: $line")
+        try {
+            val f = java.io.File(filesDir, "autosend.log")
+            if (f.length() > 40_000) f.writeText("")
+            f.appendText(line + "
+")
+        } catch (_: Exception) {}
+    }
+
+    /** 送信ボタンが見つからない時、画面にある押せる要素を全部書き出す */
+    private fun dumpCandidates(root: AccessibilityNodeInfo?) {
+        if (root == null) return
+        val sb = StringBuilder("---- clickable dump ----
+")
+        fun walk(n: AccessibilityNodeInfo?) {
+            if (n == null) return
+            if (n.isClickable) {
+                val r = Rect()
+                n.getBoundsInScreen(r)
+                sb.append("cls=").append(n.className)
+                    .append(" desc=").append(n.contentDescription)
+                    .append(" text=").append(n.text)
+                    .append(" id=").append(n.viewIdResourceName)
+                    .append(" enabled=").append(n.isEnabled)
+                    .append(" rect=").append(r.flattenToString())
+                    .append("
+")
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i))
+        }
+        walk(root)
+        diag(sb.toString())
     }
 
     private val sendWords = listOf("送信", "送る", "send", "submit", "post", "reply")
