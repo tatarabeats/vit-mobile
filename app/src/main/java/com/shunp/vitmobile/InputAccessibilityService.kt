@@ -180,7 +180,10 @@ class InputAccessibilityService : AccessibilityService() {
 
     private fun pasteOrSetText(providedText: String?) {
         Log.d(TAG, "=== pasteOrSetText text=${providedText?.take(30)} ===")
-        val node = findFocusedNode() ?: findInputNodeInTree() ?: findByLastBounds()
+        // フォーカスが当たっている入力欄にだけ入れる。
+        // 以前は画面内から入力欄を探し回っていたため、ブラウザを開いているだけで
+        // 検索欄に勝手に入っていた。選んでいない場所には入れない（駿平 2026-08-13）。
+        val node = findFocusedNode()
         if (node == null) {
             Log.d(TAG, "no node found")
             return
@@ -293,14 +296,13 @@ class InputAccessibilityService : AccessibilityService() {
     private val sendWords = listOf("送信", "送る", "send", "submit", "post", "reply")
 
     /**
-     * 「送信」に見えるノードを探す。
-     * ラベルは contentDescription / text / viewId のどれに入っているか分からないので全部見る。
-     * 見つかったノードが押せない時は、押せる親まで登る（Compose はここでよく外す）。
+     * 送信ボタンを探す。2通りで当たりに行く:
+     *  1) ラベル（contentDescription / text / viewId）に「送信」系の語があるもの
+     *  2) 入力欄の **右隣にある小さめの押せるもの**（チャットUIはほぼこの形。
+     *     アイコンだけで説明文が無いアプリはこちらで拾う）
      */
     private fun findSendButton(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (root == null) return null
-        var best: AccessibilityNodeInfo? = null
-        var bestY = -1
 
         fun clickableSelfOrParent(n: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
             var cur = n
@@ -313,8 +315,22 @@ class InputAccessibilityService : AccessibilityService() {
             return null
         }
 
+        var byLabel: AccessibilityNodeInfo? = null
+        var byLabelY = -1
+        val clickables = mutableListOf<Pair<AccessibilityNodeInfo, Rect>>()
+        var inputRect: Rect? = null
+
         fun walk(n: AccessibilityNodeInfo?) {
             if (n == null) return
+            val r = Rect()
+            n.getBoundsInScreen(r)
+
+            if (n.isFocused && (n.isEditable ||
+                    n.className?.toString()?.contains("Edit", true) == true)
+            ) {
+                inputRect = Rect(r)
+            }
+
             val label = buildString {
                 append(n.contentDescription?.toString() ?: "")
                 append(" ")
@@ -322,21 +338,34 @@ class InputAccessibilityService : AccessibilityService() {
                 append(" ")
                 append(n.viewIdResourceName?.substringAfterLast('/') ?: "")
             }.trim().lowercase()
-            if (label.isNotEmpty() && label.length <= 40 &&
-                sendWords.any { label.contains(it) }
-            ) {
-                val target = clickableSelfOrParent(n)
-                if (target != null) {
-                    val r = Rect()
-                    target.getBoundsInScreen(r)
-                    // 画面下部にあるものを優先（上部の「投稿」等を拾わないため）
-                    if (r.centerY() > bestY) { bestY = r.centerY(); best = target }
+            if (label.isNotEmpty() && label.length <= 40 && sendWords.any { label.contains(it) }) {
+                val t = clickableSelfOrParent(n)
+                if (t != null) {
+                    val tr = Rect()
+                    t.getBoundsInScreen(tr)
+                    if (tr.centerY() > byLabelY) { byLabelY = tr.centerY(); byLabel = t }
                 }
+            }
+            if (n.isClickable && n.isEnabled && r.width() > 0 && r.height() > 0) {
+                clickables.add(n to Rect(r))
             }
             for (i in 0 until n.childCount) walk(n.getChild(i))
         }
         walk(root)
-        return best
+
+        if (byLabel != null) return byLabel
+
+        // 入力欄の右側で、縦位置が重なっていて、幅が入力欄より明らかに小さいもの
+        val ir = inputRect ?: return null
+        val maxW = (ir.width() * 0.5f).toInt().coerceAtLeast(1)
+        return clickables
+            .filter { (_, r) ->
+                r.centerX() > ir.centerX() &&
+                    r.width() <= maxW &&
+                    r.centerY() in (ir.top - ir.height())..(ir.bottom + ir.height())
+            }
+            .minByOrNull { (_, r) -> r.left }
+            ?.first
     }
 
     private fun findFocusedNode(): AccessibilityNodeInfo? {
