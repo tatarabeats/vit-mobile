@@ -49,49 +49,16 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "ショートカットを保存しました", Toast.LENGTH_SHORT).show()
         }
 
-        // 画面のダブルタップで起動するか（既定OFF。ジェスチャー起動が主役）
-        b.zoneModeSwitch.isChecked = Prefs.isScreenTrigger(this)
-        b.zoneModeSwitch.setOnCheckedChangeListener { _, checked ->
-            Prefs.setScreenTrigger(this, checked)
-            if (isOverlayRunning()) {
-                stopService(Intent(this, OverlayService::class.java))
-                startForegroundService(Intent(this, OverlayService::class.java))
-            }
-        }
-
-        b.zonePassiveSwitch.isChecked = Prefs.isVolumeTrigger(this)
-        b.zonePassiveSwitch.setOnCheckedChangeListener { _, checked ->
-            Prefs.setVolumeTrigger(this, checked)
-            Toast.makeText(
-                this,
-                if (checked) "音量キー2回押しでも起動する" else "音量キー2回押しをやめた",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-
-        // ダブルタップ判定の詰め幅（100〜300ms）。誤爆が続くならここを短くする
-        b.dtapSeek.progress = (Prefs.getDoubleTapMs(this) - 100).coerceIn(0, 200)
-        b.dtapLabel.text = "ダブルタップの判定: ${Prefs.getDoubleTapMs(this)}ms"
-        b.dtapSeek.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: android.widget.SeekBar?, v: Int, fromUser: Boolean) {
-                b.dtapLabel.text = "ダブルタップの判定: ${v + 100}ms"
-            }
-            override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {
-                Prefs.setDoubleTapMs(this@MainActivity, (sb?.progress ?: 40) + 100)
-            }
-        })
-
         b.excludedInput.setText(Prefs.getExcludedPackages(this))
         b.saveExcluded.setOnClickListener {
             Prefs.setExcludedPackages(this, b.excludedInput.text.toString())
-            Toast.makeText(this, "除外アプリを保存しました", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "保存した", Toast.LENGTH_SHORT).show()
         }
 
         b.autoEnterInput.setText(Prefs.getAutoEnterPackages(this))
         b.saveAutoEnter.setOnClickListener {
             Prefs.setAutoEnterPackages(this, b.autoEnterInput.text.toString())
-            Toast.makeText(this, "自動Enterの対象を保存しました", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "保存した", Toast.LENGTH_SHORT).show()
         }
 
         b.pickAutoEnter.setOnClickListener { pickAppForAutoEnter() }
@@ -100,7 +67,7 @@ class MainActivity : AppCompatActivity() {
             val f = java.io.File(filesDir, "autosend.log")
             val body = if (f.exists()) f.readText().takeLast(4000) else ""
             AlertDialog.Builder(this)
-                .setTitle("自動送信の診断")
+                .setTitle("診断")
                 .setMessage(if (body.isBlank()) "まだ記録がありません" else body)
                 .setPositiveButton("コピー") { _, _ ->
                     val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -109,22 +76,6 @@ class MainActivity : AppCompatActivity() {
                 }
                 .setNegativeButton("消す") { _, _ -> try { f.delete() } catch (_: Exception) {} }
                 .show()
-        }
-
-        b.btnEditZone.setOnClickListener {
-            if (Prefs.getTriggerMode(this) != Prefs.TRIGGER_ZONE) {
-                Toast.makeText(this, "起動ゾーンをONにしてから確認してください", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            if (!isOverlayRunning()) {
-                Toast.makeText(this, "先に「起動」してください", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            startForegroundService(
-                Intent(this, OverlayService::class.java)
-                    .setAction(OverlayService.ACTION_EDIT_ZONE)
-            )
-            moveTaskToBack(true)
         }
 
         b.githubTokenInput.setText(Prefs.getGithubToken(this) ?: "")
@@ -181,14 +132,17 @@ class MainActivity : AppCompatActivity() {
             }
             val intent = Intent(this, OverlayService::class.java)
             startForegroundService(intent)
-            val msg = if (Prefs.getTriggerMode(this) == Prefs.TRIGGER_ZONE)
-                "起動した。ゾーンをダブルタップで録音"
-            else "フロートマイクを起動しました"
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "起動した", Toast.LENGTH_SHORT).show()
             moveTaskToBack(true)
         }
 
         b.btnHistory.setOnClickListener { showHistoryDialog() }
+
+        b.btnToggleAdvanced.setOnClickListener {
+            val open = b.advancedBox.visibility != android.view.View.VISIBLE
+            b.advancedBox.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            b.btnToggleAdvanced.text = if (open) "設定を閉じる" else "設定を開く"
+        }
 
         b.btnStopOverlay.setOnClickListener {
             stopService(Intent(this, OverlayService::class.java))
@@ -211,7 +165,7 @@ class MainActivity : AppCompatActivity() {
         val labels = items.map { (ts, text) -> "[" + fmt.format(java.util.Date(ts)) + "] " + text }
             .toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle("喋った内容 " + items.size + " 件（タップでコピー）")
+            .setTitle("履歴")
             .setItems(labels) { _, which ->
                 val text = items[which].second
                 val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -271,7 +225,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         AlertDialog.Builder(this)
-            .setTitle("送信まで行うアプリを追加")
+            .setTitle("アプリを選ぶ")
             .setAdapter(adapter) { _, which ->
                 val pkg = apps[which].second
                 val cur = b.autoEnterInput.text.toString().trimEnd()

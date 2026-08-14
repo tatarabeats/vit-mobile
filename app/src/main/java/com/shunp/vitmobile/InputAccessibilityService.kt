@@ -159,17 +159,16 @@ class InputAccessibilityService : AccessibilityService() {
         if (e.action != android.view.KeyEvent.ACTION_DOWN) return false
         if (e.keyCode != android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return false
         // 録音中は設定に関係なく「取り消し」に使う（ジェスチャー枠を消費しない取り消し手段）
+        // 音量キーでの「起動」は廃止。録音中の取り消しだけ受ける（2026-08-14）
         val recording = OverlayService.isRecordingNow
-        if (!recording && !Prefs.isVolumeTrigger(this)) return false
+        if (!recording) return false
         val now = System.currentTimeMillis()
         if (now - lastVolKeyAt in 1..450) {
             lastVolKeyAt = 0
             try {
                 startForegroundService(
-                    Intent(this, OverlayService::class.java).setAction(
-                        if (recording) OverlayService.ACTION_CANCEL
-                        else OverlayService.ACTION_TRIGGER
-                    )
+                    Intent(this, OverlayService::class.java)
+                        .setAction(OverlayService.ACTION_CANCEL)
                 )
             } catch (_: Exception) {}
         } else {
@@ -268,23 +267,23 @@ class InputAccessibilityService : AccessibilityService() {
             root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: fallback
         } catch (_: Exception) { fallback }
 
-        // 1) IME の実行キー相当
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                if (focus.performAction(
-                        AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id
-                    )
-                ) {
-                    diag("attempt=$attempt ime_enter ok")
-                    return true
-                }
-            } catch (_: Exception) {}
-        }
-
+        // IME の実行キー（ACTION_IME_ENTER）は true を返すのに実際には送信されない
+        // アプリがある（Claude で確認・2026-08-14）。当てにせず、送信ボタンを押しに行く。
         val btn = findSendButton(root)
         if (btn == null) {
             diag("attempt=$attempt send button not found")
             if (attempt == 2) dumpCandidates(root)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                try {
+                    if (focus.performAction(
+                            AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id
+                        )
+                    ) {
+                        diag("attempt=$attempt fallback ime_enter")
+                        return true
+                    }
+                } catch (_: Exception) {}
+            }
             return false
         }
         val r = Rect()

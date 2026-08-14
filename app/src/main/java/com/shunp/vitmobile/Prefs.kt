@@ -16,10 +16,7 @@ object Prefs {
     private const val MAX_HISTORY = 50
     private const val KEY_TRIGGER = "trigger_mode"
     private const val KEY_GITHUB_TOKEN = "github_token"
-    private const val KEY_VOLUME_TRIGGER = "volume_trigger"
-    private const val KEY_DTAP_MS = "double_tap_ms"
     private const val KEY_EXCLUDED = "excluded_packages"
-    private const val KEY_SCREEN_TRIGGER = "screen_trigger"
     private const val KEY_AUTO_ENTER = "auto_enter_packages"
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
@@ -35,32 +32,7 @@ object Prefs {
             .edit().putString(KEY_TRIGGER, mode).apply()
     }
 
-    /**
-     * 音量キー2回押しでも起動するか。
-     * ACTION_OUTSIDE の座標が取れない端末（Android 12+ の制限）向けの逃げ道。
-     * 画面のタッチは絶対に奪わないと決めたので、占有方式は持たない。
-     */
-    fun isVolumeTrigger(ctx: Context): Boolean =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_VOLUME_TRIGGER, false)
 
-    fun setVolumeTrigger(ctx: Context, on: Boolean) {
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_VOLUME_TRIGGER, on).apply()
-    }
-
-    /**
-     * ダブルタップとみなす間隔（ミリ秒）。短いほど誤爆しない。
-     * スクロールの指下ろしは間隔が空くので、ここを詰めるのが一番効く。
-     */
-    fun getDoubleTapMs(ctx: Context): Int =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_DTAP_MS, 140)
-
-    fun setDoubleTapMs(ctx: Context, ms: Int) {
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putInt(KEY_DTAP_MS, ms).apply()
-    }
 
     /**
      * 起動ゾーンを無効にするアプリ（パッケージ名・改行区切り）。
@@ -100,19 +72,6 @@ object Prefs {
             .any { it.isNotEmpty() && it.equals(pkg, ignoreCase = true) }
     }
 
-    /**
-     * 画面のダブルタップで起動するか。**既定OFF**（2026-08-13）。
-     * 他アプリのダブルタップ動作との干渉が多く、実用に耐えなかった。
-     * 通常は One Hand Operation+ 等のジェスチャーから TriggerActivity を叩く。
-     */
-    fun isScreenTrigger(ctx: Context): Boolean =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_SCREEN_TRIGGER, false)
-
-    fun setScreenTrigger(ctx: Context, on: Boolean) {
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putBoolean(KEY_SCREEN_TRIGGER, on).apply()
-    }
 
     /**
      * 挿入した後に Enter まで送るアプリ（パッケージ名・改行区切り）。

@@ -14,408 +14,26 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/app_name"
-            android:textSize="32sp"
+            android:textSize="28sp"
             android:textStyle="bold"
             android:textColor="#FFF0C040"
-            android:paddingBottom="24dp" />
+            android:paddingBottom="18dp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="1. Groq APIキー（音声認識）"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
-            android:paddingTop="8dp"
-            android:paddingBottom="6dp" />
-
-        <EditText
-            android:id="@+id/apiKeyInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="gsk_..."
-            android:inputType="textPassword"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#80FFFFFF"
-            android:background="#FF1A2440"
-            android:padding="14dp"
-            android:autofillHints="password" />
-
+        <!-- よく触るものを上に置く -->
         <Button
-            android:id="@+id/saveApiKey"
-            android:layout_width="wrap_content"
+            android:id="@+id/btnHistory"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="保存"
+            android:text="履歴"
             android:textColor="#FF0A0E1A"
             android:backgroundTint="#FFF0C040" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="2. Anthropic APIキー（句読点・誤字補正、任意）"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
-            android:paddingTop="20dp"
-            android:paddingBottom="6dp" />
-
-        <EditText
-            android:id="@+id/anthropicKeyInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="sk-ant-..."
-            android:inputType="textPassword"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#80FFFFFF"
-            android:background="#FF1A2440"
-            android:padding="14dp"
-            android:autofillHints="password" />
-
-        <Button
-            android:id="@+id/saveAnthropicKey"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="保存"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/llmFixSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="LLM補正を有効化（Anthropic APIキー必須）"
-            android:textColor="#FFFFFFFF"
-            android:textSize="15sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="辞書（住所・固有名詞、改行区切り）"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
-            android:paddingTop="20dp"
-            android:paddingBottom="6dp" />
-
-        <EditText
-            android:id="@+id/dictionaryInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="120dp"
-            android:gravity="top|start"
-            android:hint="例:&#10;和歌山県有田市初島町&#10;和歌山県東牟婁郡那智勝浦町&#10;白浜町、上富田町、新宮市..."
-            android:inputType="textMultiLine"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#80FFFFFF"
-            android:background="#FF1A2440"
-            android:padding="14dp"
-            android:textSize="14sp" />
-
-        <Button
-            android:id="@+id/saveDictionary"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="辞書を保存"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="ショートカット（話した言葉 → 入力される文字列）"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
-            android:paddingTop="20dp"
-            android:paddingBottom="6dp" />
-
-        <EditText
-            android:id="@+id/snippetsInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="100dp"
-            android:gravity="top|start"
-            android:hint="例:&#10;住所|和歌山県〇〇市〇〇町1-2-3&#10;電話|090-1234-5678&#10;メール|shunp@example.com"
-            android:inputType="textMultiLine"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#80FFFFFF"
-            android:background="#FF1A2440"
-            android:padding="14dp"
-            android:textSize="14sp" />
-
-        <Button
-            android:id="@+id/saveSnippets"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="ショートカットを保存"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="16dp"
-            android:background="#FFF0C040" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="起動方法"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
-            android:paddingBottom="6dp" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/zoneModeSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="画面のダブルタップでも起動する（他アプリと干渉するので既定OFF）"
-            android:textColor="#FFFFFFFF"
-            android:textSize="15sp" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/zonePassiveSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="音量キー2回押しでも起動する（画面のダブルタップが効かない時の保険）"
-            android:textColor="#FFFFFFFF"
-            android:textSize="15sp" />
-
-        <TextView
-            android:id="@+id/dtapLabel"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:text="ダブルタップの判定: 140ms"
-            android:textColor="#FFFFFFFF"
-            android:textSize="15sp" />
-
-        <SeekBar
-            android:id="@+id/dtapSeek"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="200"
-            android:progress="40" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="短いほど誤爆しない（100〜300ms）。反応しない時だけ右へ"
-            android:textColor="#CCFFFFFF"
-            android:textSize="13sp"
-            android:paddingBottom="6dp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:text="このアプリでは起動しない（パッケージ名・改行区切り）"
-            android:textColor="#FFFFFFFF"
-            android:textSize="15sp"
-            android:paddingBottom="6dp" />
-
-        <EditText
-            android:id="@+id/excludedInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="100dp"
-            android:gravity="top|start"
-            android:inputType="textMultiLine"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#80FFFFFF"
-            android:background="#FF1A2440"
-            android:padding="14dp"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/saveExcluded"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="除外アプリを保存"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:text="挿入したあと送信まで行うアプリ（パッケージ名・改行区切り）"
-            android:textColor="#FFFFFFFF"
-            android:textSize="15sp"
-            android:paddingBottom="6dp" />
-
-        <EditText
-            android:id="@+id/autoEnterInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="80dp"
-            android:gravity="top|start"
-            android:inputType="textMultiLine"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#80FFFFFF"
-            android:background="#FF1A2440"
-            android:padding="14dp"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/pickAutoEnter"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="アプリ一覧から選んで追加"
-            android:textColor="#FFFFFFFF"
-            android:backgroundTint="#FF1A2440" />
-
-        <Button
-            android:id="@+id/btnAutoSendDiag"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="自動送信の診断を見る"
-            android:textColor="#FFFFFFFF"
-            android:backgroundTint="#FF1A2440" />
-
-        <Button
-            android:id="@+id/saveAutoEnter"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="自動Enterを保存"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <Button
-            android:id="@+id/btnEditZone"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="起動ゾーンの場所を確認（5秒だけ表示）"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textSize="13sp"
-            android:textColor="#CCFFFFFF"
-            android:lineSpacingExtra="4dp"
-            android:text="画面の左右のキワ（縦の帯）なら、どこでも同じ:\n・2回タップ → 録音開始\n・録音中にタップ → 確定して挿入\n・3回タップ → 履歴（枠外タップで閉じる）\n・4回タップ → フィードバック録音\n・録音中に長押し → キャンセル" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="フィードバック送信（GitHubトークン）"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
-            android:paddingTop="20dp"
-            android:paddingBottom="6dp" />
-
-        <EditText
-            android:id="@+id/githubTokenInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="github_pat_..."
-            android:inputType="textPassword"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#80FFFFFF"
-            android:background="#FF1A2440"
-            android:padding="14dp"
-            android:autofillHints="password" />
-
-        <Button
-            android:id="@+id/saveGithubToken"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="保存"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <Button
-            android:id="@+id/btnSendFeedback"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="未送信のフィードバックを送る"
-            android:textColor="#FFFFFFFF"
-            android:backgroundTint="#FF1A2440" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="16dp"
-            android:background="#FFF0C040" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="3. 権限設定（初回のみ）"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
-            android:paddingBottom="6dp" />
-
-        <Button
-            android:id="@+id/btnOverlayPerm"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="他のアプリの上に表示"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <Button
-            android:id="@+id/btnAccessibilityPerm"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="ユーザー補助を有効化"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="16dp"
-            android:background="#FFF0C040" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="4. 起動 / 停止"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
-            android:paddingBottom="6dp" />
 
         <Button
             android:id="@+id/btnStartOverlay"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="8dp"
             android:text="起動"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <Button
-            android:id="@+id/btnHistory"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="喋った内容の一覧（タップでコピー）"
             android:textColor="#FF0A0E1A"
             android:backgroundTint="#FFF0C040" />
 
@@ -423,20 +41,333 @@
             android:id="@+id/btnStopOverlay"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="8dp"
             android:text="停止"
             android:textColor="#FFFFFFFF"
             android:backgroundTint="#FF1A2440" />
 
-
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="14dp"
+            android:background="#33F0C040" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:textSize="13sp"
-            android:textColor="#CCFFFFFF"
-            android:lineSpacingExtra="4dp"
-            android:text="常時表示マイクの使い方:\n・タップで録音開始/停止\n・録音中に長押しでキャンセル\n・ドラッグで位置移動" />
+            android:text="自動送信"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
+            android:paddingBottom="6dp" />
+
+        <EditText
+            android:id="@+id/autoEnterInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="70dp"
+            android:gravity="top|start"
+            android:inputType="textMultiLine"
+            android:textColor="#FFFFFFFF"
+            android:textColorHint="#80FFFFFF"
+            android:background="#FF1A2440"
+            android:padding="12dp"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp">
+
+            <Button
+                android:id="@+id/pickAutoEnter"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="アプリを選ぶ"
+                android:textColor="#FFFFFFFF"
+                android:backgroundTint="#FF1A2440" />
+
+            <Button
+                android:id="@+id/saveAutoEnter"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="保存"
+                android:textColor="#FF0A0E1A"
+                android:backgroundTint="#FFF0C040" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnAutoSendDiag"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="診断"
+            android:textColor="#FFFFFFFF"
+            android:backgroundTint="#FF1A2440" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="除外アプリ"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
+            android:paddingTop="20dp"
+            android:paddingBottom="6dp" />
+
+        <EditText
+            android:id="@+id/excludedInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="70dp"
+            android:gravity="top|start"
+            android:inputType="textMultiLine"
+            android:textColor="#FFFFFFFF"
+            android:textColorHint="#80FFFFFF"
+            android:background="#FF1A2440"
+            android:padding="12dp"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/saveExcluded"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="保存"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="14dp"
+            android:background="#33F0C040" />
+
+        <!-- ここから下は初回だけ触るもの。既定では畳んでおく -->
+        <Button
+            android:id="@+id/btnToggleAdvanced"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="設定を開く"
+            android:textColor="#FFFFFFFF"
+            android:backgroundTint="#FF1A2440" />
+
+        <LinearLayout
+            android:id="@+id/advancedBox"
+            android:orientation="vertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="権限"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:textColor="#FFFFFFFF"
+                android:paddingTop="18dp"
+                android:paddingBottom="6dp" />
+
+            <Button
+                android:id="@+id/btnOverlayPerm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="他のアプリの上に表示"
+                android:textColor="#FFFFFFFF"
+                android:backgroundTint="#FF1A2440" />
+
+            <Button
+                android:id="@+id/btnAccessibilityPerm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="ユーザー補助"
+                android:textColor="#FFFFFFFF"
+                android:backgroundTint="#FF1A2440" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Groq APIキー"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:textColor="#FFFFFFFF"
+                android:paddingTop="20dp"
+                android:paddingBottom="6dp" />
+
+            <EditText
+                android:id="@+id/apiKeyInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="gsk_..."
+                android:inputType="textPassword"
+                android:textColor="#FFFFFFFF"
+                android:textColorHint="#80FFFFFF"
+                android:background="#FF1A2440"
+                android:padding="12dp"
+                android:autofillHints="password" />
+
+            <Button
+                android:id="@+id/saveApiKey"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="保存"
+                android:textColor="#FF0A0E1A"
+                android:backgroundTint="#FFF0C040" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Anthropic APIキー"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:textColor="#FFFFFFFF"
+                android:paddingTop="20dp"
+                android:paddingBottom="6dp" />
+
+            <EditText
+                android:id="@+id/anthropicKeyInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="sk-ant-..."
+                android:inputType="textPassword"
+                android:textColor="#FFFFFFFF"
+                android:textColorHint="#80FFFFFF"
+                android:background="#FF1A2440"
+                android:padding="12dp"
+                android:autofillHints="password" />
+
+            <Button
+                android:id="@+id/saveAnthropicKey"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="保存"
+                android:textColor="#FF0A0E1A"
+                android:backgroundTint="#FFF0C040" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/llmFixSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="文章を整える"
+                android:textColor="#FFFFFFFF"
+                android:textSize="15sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="辞書"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:textColor="#FFFFFFFF"
+                android:paddingTop="20dp"
+                android:paddingBottom="6dp" />
+
+            <EditText
+                android:id="@+id/dictionaryInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="90dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine"
+                android:textColor="#FFFFFFFF"
+                android:textColorHint="#80FFFFFF"
+                android:background="#FF1A2440"
+                android:padding="12dp"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/saveDictionary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="保存"
+                android:textColor="#FF0A0E1A"
+                android:backgroundTint="#FFF0C040" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ショートカット"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:textColor="#FFFFFFFF"
+                android:paddingTop="20dp"
+                android:paddingBottom="6dp" />
+
+            <EditText
+                android:id="@+id/snippetsInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="80dp"
+                android:gravity="top|start"
+                android:hint="住所|和歌山県〇〇市〇〇町1-2-3"
+                android:inputType="textMultiLine"
+                android:textColor="#FFFFFFFF"
+                android:textColorHint="#80FFFFFF"
+                android:background="#FF1A2440"
+                android:padding="12dp"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/saveSnippets"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="保存"
+                android:textColor="#FF0A0E1A"
+                android:backgroundTint="#FFF0C040" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="GitHubトークン"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:textColor="#FFFFFFFF"
+                android:paddingTop="20dp"
+                android:paddingBottom="6dp" />
+
+            <EditText
+                android:id="@+id/githubTokenInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="github_pat_..."
+                android:inputType="textPassword"
+                android:textColor="#FFFFFFFF"
+                android:textColorHint="#80FFFFFF"
+                android:background="#FF1A2440"
+                android:padding="12dp"
+                android:autofillHints="password" />
+
+            <Button
+                android:id="@+id/saveGithubToken"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="保存"
+                android:textColor="#FF0A0E1A"
+                android:backgroundTint="#FFF0C040" />
+
+            <Button
+                android:id="@+id/btnSendFeedback"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="24dp"
+                android:text="フィードバックを送る"
+                android:textColor="#FFFFFFFF"
+                android:backgroundTint="#FF1A2440" />
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>

@@ -259,8 +259,9 @@ class OverlayService : Service() {
     //   録音中のタップ … 確定して挿入 / 録音中の2回タップ … キャンセル
     //   帯そのものは常に FLAG_NOT_TOUCHABLE。見せるだけで、触れる窓は一切置かない
     private fun setupHotZone(overlayType: Int) {
-        // 画面ダブルタップは既定OFF。ジェスチャー（TriggerActivity）が主役
-        if (!Prefs.isScreenTrigger(this)) return
+        // 画面のダブルタップ起動は廃止（他アプリと干渉して使い物にならなかった）。
+        // 起動はジェスチャーから TriggerActivity を叩く経路だけ（2026-08-14）。
+        if (true) return
         setupWatcher(overlayType)
         showZoneHint(overlayType, 3000)
     }
@@ -313,7 +314,7 @@ class OverlayService : Service() {
             coordsBlind = true
             if (InputAccessibilityService.imeTop() >= 0) return
             val nowBlind = System.currentTimeMillis()
-            val quickBlind = nowBlind - lastTapAt < Prefs.getDoubleTapMs(this)
+            val quickBlind = nowBlind - lastTapAt < 140
             lastTapAt = nowBlind
             if (!quickBlind) { tapCount = 0; onEdgeTap(reset = true) } else onEdgeTap(reset = false)
             return
@@ -334,7 +335,7 @@ class OverlayService : Service() {
         // 判定時間は設定で詰められる（既定140ms・2026-08-12 実使用で短縮）。
         val now = System.currentTimeMillis()
         val near = abs(x - lastTapX) < density * 30 && abs(y - lastTapY) < density * 30
-        val quick = now - lastTapAt < Prefs.getDoubleTapMs(this)
+        val quick = now - lastTapAt < 140
         lastTapX = x
         lastTapY = y
         if (!quick || !near) {
