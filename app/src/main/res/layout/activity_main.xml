@@ -35,7 +35,7 @@
             android:layout_marginTop="8dp"
             android:text="起動"
             android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
+            android:backgroundTint="#FF4ECB8B" />
 
         <Button
             android:id="@+id/btnStopOverlay"
