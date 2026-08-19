@@ -136,7 +136,7 @@ class MainActivity : AppCompatActivity() {
             moveTaskToBack(true)
         }
 
-        b.btnHistory.setOnClickListener { showHistoryDialog() }
+        b.btnHistory.setOnClickListener { startActivity(Intent(this, HistoryActivity::class.java)) }
 
         b.btnToggleAdvanced.setOnClickListener {
             val open = b.advancedBox.visibility != android.view.View.VISIBLE
@@ -149,35 +149,6 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "停止しました", Toast.LENGTH_SHORT).show()
         }
 
-    }
-
-    /**
-     * 喋った内容の一覧。挿入したものも、取り消したものも全部ここに残る。
-     * クリップボードには書かない方針にしたので、拾い直す場所がここになる。
-     */
-    private fun showHistoryDialog() {
-        val items = Prefs.getHistory(this)
-        if (items.isEmpty()) {
-            Toast.makeText(this, "まだ何もありません", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val fmt = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.JAPAN)
-        val labels = items.map { (ts, text) -> "[" + fmt.format(java.util.Date(ts)) + "] " + text }
-            .toTypedArray()
-        AlertDialog.Builder(this)
-            .setTitle("履歴")
-            .setItems(labels) { _, which ->
-                val text = items[which].second
-                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                cm.setPrimaryClip(android.content.ClipData.newPlainText("VIT", text))
-                Toast.makeText(this, "コピーしました", Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("全消去") { _, _ ->
-                Prefs.clearHistory(this)
-                Toast.makeText(this, "消しました", Toast.LENGTH_SHORT).show()
-            }
-            .setPositiveButton("閉じる", null)
-            .show()
     }
 
     /** インストール済みアプリから選んで、自動Enterの対象に追加する（アイコン付き） */

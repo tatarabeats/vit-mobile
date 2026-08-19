@@ -39,6 +39,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".HistoryActivity"
+            android:exported="false"
+            android:label="履歴"
+            android:theme="@style/Theme.VitMobile" />
+
         <!-- One Hand Operation+ 等のジェスチャーから「アプリを開く」で選べる透明な入口。
              開いても何も表示せず、録音の開始/確定だけを行う -->
         <activity
