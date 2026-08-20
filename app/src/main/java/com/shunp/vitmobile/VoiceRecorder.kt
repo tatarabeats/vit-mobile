@@ -72,6 +72,31 @@ class VoiceRecorder(private val ctx: Context) {
     }
 
     /**
+     * verbose_json から本文を取り出す。
+     * 黙っている時に Whisper が捏造した区間は、Whisper 自身が
+     * 「ここは音声ではない」(no_speech_prob 高) かつ「自信がない」(avg_logprob 低) と申告するので、
+     * その区間だけ捨てる（2026-08-20）。
+     */
+    private fun textFromVerbose(json: JSONObject): String {
+        val whole = json.optString("text").trim()
+        val segments = json.optJSONArray("segments") ?: return whole
+        val sb = StringBuilder()
+        for (i in 0 until segments.length()) {
+            val seg = segments.optJSONObject(i) ?: continue
+            val t = seg.optString("text").trim()
+            if (t.isEmpty()) continue
+            val noSpeech = seg.optDouble("no_speech_prob", -1.0)
+            val avgLp = seg.optDouble("avg_logprob", 0.0)
+            if (noSpeech in 0.0..1.0 && noSpeech > 0.6 && avgLp < -1.0) {
+                android.util.Log.d("VIT", "drop silence segment: $t")
+                continue
+            }
+            sb.append(t)
+        }
+        return sb.toString().trim()
+    }
+
+    /**
      * LLM補正の共通経路。**Groq 優先**（PC版の実測で Haiku 0.5-1s → Groq 0.2-0.3s）。
      * Groq が失敗した時だけ Anthropic Haiku に落とす。どちらのキーも無ければ null。
      */
@@ -281,7 +306,7 @@ class VoiceRecorder(private val ctx: Context) {
             )
             .addFormDataPart("model", "whisper-large-v3-turbo")
             .addFormDataPart("language", "ja")
-            .addFormDataPart("response_format", "json")
+            .addFormDataPart("response_format", "verbose_json")
         if (dict.isNotEmpty()) {
             // Whisper の prompt は最大 224 トークン → 安全に 800 文字でクランプ
             val prompt = if (dict.length > 800) dict.substring(0, 800) else dict
@@ -303,7 +328,7 @@ class VoiceRecorder(private val ctx: Context) {
                     return@withContext null
                 }
                 val json = JSONObject(resp.body?.string() ?: "{}")
-                json.optString("text").trim()
+                textFromVerbose(json)
             }
         } catch (e: Exception) {
             android.util.Log.d("VIT", "groq failed: ${e.message}")
