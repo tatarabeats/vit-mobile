@@ -46,6 +46,15 @@
             android:textColor="#FFFFFFFF"
             android:backgroundTint="#FF1A2440" />
 
+        <Button
+            android:id="@+id/btnUpdate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="更新を確認"
+            android:textColor="#FFFFFFFF"
+            android:backgroundTint="#FF2B3A5C" />
+
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"

@@ -11,6 +11,11 @@ import androidx.appcompat.app.AppCompatActivity
 import com.shunp.vitmobile.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
+    companion object {
+        /** 更新通知から開かれた時 */
+        const val ACTION_RUN_UPDATE = "com.shunp.vitmobile.RUN_UPDATE"
+    }
+
     private lateinit var b: ActivityMainBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -137,6 +142,22 @@ class MainActivity : AppCompatActivity() {
         }
 
         b.btnHistory.setOnClickListener { startActivity(Intent(this, HistoryActivity::class.java)) }
+
+        b.btnUpdate.text = "更新を確認  (v" + BuildInfo.versionName(this) + ")"
+        b.btnUpdate.setOnClickListener { Updater.checkNow(this) }
+
+        // 開いた時に自動で確認する（通知を切っていても気づけるように）
+        Updater.checkOnOpen(this)
+
+        // 更新通知から来た時は、そのまま取得からインストールまで進める
+        if (intent?.action == ACTION_RUN_UPDATE) {
+            val url = intent.getStringExtra("url")
+            val ver = intent.getStringExtra("version") ?: ""
+            if (!url.isNullOrBlank()) {
+                Toast.makeText(this, ver + " を取得中…", Toast.LENGTH_SHORT).show()
+                Updater.download(this, Updater.Release(ver, url))
+            }
+        }
 
         b.btnToggleAdvanced.setOnClickListener {
             val open = b.advancedBox.visibility != android.view.View.VISIBLE
