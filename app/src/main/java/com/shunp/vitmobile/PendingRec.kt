@@ -12,6 +12,8 @@ import java.io.File
 object PendingRec {
     const val MARKER_NAME = "pending_rec.json"
     const val TEXT_NAME = "pending_text.json"
+    /** 再起動で消える cacheDir ではなく filesDir に置く */
+    const val AUDIO_PREFIX = "pending_rec_"
     /** 失敗したらあと1回だけ拾う。それ以上は捨てる */
     const val MAX_RETRIES = 1
 
@@ -24,6 +26,12 @@ object PendingRec {
         val amps: List<Int>,
         val retries: Int
     )
+
+    fun audioName(ts: Long): String = "${AUDIO_PREFIX}${ts}.m4a"
+
+    /** 再起動後も残る録音ファイル。cacheDir は使わない */
+    fun newAudioFile(ctx: Context, ts: Long = System.currentTimeMillis()): File =
+        File(ctx.filesDir, audioName(ts))
 
     fun markerFile(ctx: Context): File = File(ctx.filesDir, MARKER_NAME)
 

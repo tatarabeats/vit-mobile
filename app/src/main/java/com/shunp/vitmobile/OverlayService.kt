@@ -702,10 +702,7 @@ class OverlayService : Service() {
         updateZoneVisual()
         buzz(120)
         showStatus("busy")
-        recorder?.stopAndTranscribe { text ->
-            hideStatus()
-            if (!text.isNullOrBlank()) Prefs.addHistory(this, text)
-        }
+        recorder?.stopAndTranscribe { hideStatus() }
     }
 
     // ==================== 状態表示（画面最上部の細いライン） ====================
@@ -861,7 +858,7 @@ class OverlayService : Service() {
     }
 
     private fun copyAndPaste(text: String) {
-        Prefs.addHistory(this, text)
+        // 履歴は VoiceRecorder が insert 前に書く。ここでは二重にしない。
         // クリップボードには書かない。書くと Windows とのリンク（Phone Link）が
         // 「接続デバイスにコピーしました」を毎回出して邪魔になる（駿平 2026-08-13）。
         // 挿入はユーザー補助へテキストを直接渡す経路だけで足りる。

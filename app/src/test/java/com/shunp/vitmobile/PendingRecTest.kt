@@ -9,7 +9,7 @@ class PendingRecTest {
     @Test
     fun jsonRoundTrip() {
         val state = PendingRec.State(
-            path = "/data/user/0/com.shunp.vitmobile/cache/vit_1.m4a",
+            path = "/data/user/0/com.shunp.vitmobile/files/pending_rec_1.m4a",
             startMs = 1000L,
             durationMs = 2500L,
             amps = listOf(100, 2000, 8000),
@@ -28,5 +28,14 @@ class PendingRecTest {
     @Test
     fun garbageIsRejected() {
         assertNull(PendingRec.fromJson("not-json"))
+    }
+
+    @Test
+    fun durableAudioNameIsNotCache() {
+        val name = PendingRec.audioName(1234L)
+        assertEquals("pending_rec_1234.m4a", name)
+        assertEquals(true, name.startsWith(PendingRec.AUDIO_PREFIX))
+        assertEquals(false, name.contains("cache"))
+        assertEquals(false, name.startsWith("vit_"))
     }
 }

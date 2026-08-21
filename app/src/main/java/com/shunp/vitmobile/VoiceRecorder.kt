@@ -53,7 +53,8 @@ class VoiceRecorder(private val ctx: Context) {
         .build()
 
     fun start(): Boolean {
-        val file = File(ctx.cacheDir, "vit_${System.currentTimeMillis()}.m4a")
+        // filesDir。cacheDir だと再起動で消えて、聞き取れていた分が復旧できない
+        val file = PendingRec.newAudioFile(ctx)
         currentFile = file
         val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
             MediaRecorder(ctx)
