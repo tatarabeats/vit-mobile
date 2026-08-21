@@ -15,8 +15,8 @@ android {
         //  2) Android 12 の「他アプリ上の ACTION_OUTSIDE 座標を隠す」制限を避け、
         //     起動ゾーンの位置判定に座標を使えるようにする（2026-08-12）
         targetSdk = 30
-        versionCode = 55
-        versionName = "0.9.17"
+        versionCode = 56
+        versionName = "0.9.18"
     }
 
     signingConfigs {
@@ -77,4 +77,6 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

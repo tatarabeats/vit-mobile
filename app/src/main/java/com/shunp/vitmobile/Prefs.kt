@@ -203,7 +203,7 @@ object Prefs {
         sp.edit().remove(KEY_HISTORY).apply()
     }
 
-    fun addHistory(ctx: Context, text: String) {
+    fun addHistory(ctx: Context, text: String, ts: Long = System.currentTimeMillis()) {
         if (text.isBlank()) return
         migrateLegacyHistoryIfNeeded(ctx)
         val file = historyFile(ctx)
@@ -211,8 +211,16 @@ object Prefs {
             try { file.readText() } catch (_: Exception) { "[]" }
         } else "[]"
         val arr = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+        if (arr.length() > 0) {
+            try {
+                val newest = arr.getJSONObject(0)
+                if (newest.optString("text") == text &&
+                    kotlin.math.abs(newest.optLong("ts") - ts) < 5000
+                ) return
+            } catch (_: Exception) {}
+        }
         val newArr = JSONArray()
-        newArr.put(JSONObject().put("ts", System.currentTimeMillis()).put("text", text))
+        newArr.put(JSONObject().put("ts", ts).put("text", text))
         for (i in 0 until minOf(arr.length(), MAX_HISTORY - 1)) {
             try { newArr.put(arr.getJSONObject(i)) } catch (_: Exception) {}
         }

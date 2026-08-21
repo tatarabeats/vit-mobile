@@ -96,6 +96,7 @@ class OverlayService : Service() {
         startAsForeground()
         setupOverlay()
         recorder = VoiceRecorder(this)
+        recorder?.recoverPending()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

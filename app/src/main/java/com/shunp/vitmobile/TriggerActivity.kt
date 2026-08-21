@@ -18,6 +18,7 @@ import android.widget.Toast
 class TriggerActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        VoiceRecorder.recoverFrom(this)
         if (!Settings.canDrawOverlays(this) || Prefs.getGroqKey(this).isNullOrBlank()) {
             Toast.makeText(this, "VIT の初期設定が済んでいません", Toast.LENGTH_SHORT).show()
             startActivity(Intent(this, MainActivity::class.java))
