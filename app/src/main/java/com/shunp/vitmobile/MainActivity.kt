@@ -22,6 +22,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
+        VoiceRecorder.recoverFrom(this)
 
         b.apiKeyInput.setText(Prefs.getGroqKey(this) ?: "")
         b.saveApiKey.setOnClickListener {
