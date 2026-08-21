@@ -18,6 +18,7 @@ object Prefs {
     private const val KEY_GITHUB_TOKEN = "github_token"
     private const val KEY_EXCLUDED = "excluded_packages"
     private const val KEY_AUTO_ENTER = "auto_enter_packages"
+    private const val KEY_AUTO_ENTER_ON = "auto_enter_enabled"
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
     const val TRIGGER_ZONE = "zone"
@@ -94,7 +95,18 @@ object Prefs {
             .edit().putString(KEY_AUTO_ENTER, text).apply()
     }
 
+    /** 自動送信そのものの ON/OFF。対象アプリの一覧より上位の判定 */
+    fun isAutoEnterEnabled(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_AUTO_ENTER_ON, true)
+
+    fun setAutoEnterEnabled(ctx: Context, on: Boolean) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_AUTO_ENTER_ON, on).apply()
+    }
+
     fun isAutoEnter(ctx: Context, pkg: String?): Boolean {
+        if (!isAutoEnterEnabled(ctx)) return false
         if (pkg.isNullOrBlank()) return false
         return getAutoEnterPackages(ctx).lineSequence()
             .map { it.trim() }

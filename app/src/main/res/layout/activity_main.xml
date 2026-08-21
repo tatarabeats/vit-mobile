@@ -28,6 +28,16 @@
             android:textColor="#FF0A0E1A"
             android:backgroundTint="#FFF0C040" />
 
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/autoEnterSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="4dp"
+            android:text="自動送信"
+            android:textColor="#FFFFFFFF"
+            android:textSize="16sp" />
+
         <Button
             android:id="@+id/btnStartOverlay"
             android:layout_width="match_parent"

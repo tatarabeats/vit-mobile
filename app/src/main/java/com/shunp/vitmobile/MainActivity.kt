@@ -143,6 +143,12 @@ class MainActivity : AppCompatActivity() {
 
         b.btnHistory.setOnClickListener { startActivity(Intent(this, HistoryActivity::class.java)) }
 
+        b.autoEnterSwitch.isChecked = Prefs.isAutoEnterEnabled(this)
+        b.autoEnterSwitch.setOnCheckedChangeListener { _, checked ->
+            Prefs.setAutoEnterEnabled(this, checked)
+            Toast.makeText(this, if (checked) "自動送信 ON" else "自動送信 OFF", Toast.LENGTH_SHORT).show()
+        }
+
         b.btnUpdate.text = "更新を確認  (v" + BuildInfo.versionName(this) + ")"
         b.btnUpdate.setOnClickListener { Updater.checkNow(this) }
 
