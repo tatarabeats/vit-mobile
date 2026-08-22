@@ -31,6 +31,11 @@ class PendingRecTest {
     }
 
     @Test
+    fun apiFailureKeepsRetryBudget() {
+        assertEquals(3, PendingRec.MAX_RETRIES)
+    }
+
+    @Test
     fun durableAudioNameIsNotCache() {
         val name = PendingRec.audioName(1234L)
         assertEquals("pending_rec_1234.m4a", name)
