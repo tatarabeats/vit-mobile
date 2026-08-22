@@ -30,6 +30,7 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.VitMobile"
+        android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
         <activity
@@ -45,6 +46,12 @@
             android:name=".HistoryActivity"
             android:exported="false"
             android:label="履歴"
+            android:theme="@style/Theme.VitMobile" />
+
+        <activity
+            android:name=".ClipActivity"
+            android:exported="false"
+            android:label="PCクリップ"
             android:theme="@style/Theme.VitMobile" />
 
         <!-- One Hand Operation+ 等のジェスチャーから「アプリを開く」で選べる透明な入口。
