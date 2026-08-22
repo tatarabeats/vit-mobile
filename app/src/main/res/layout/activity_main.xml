@@ -60,7 +60,7 @@
             android:id="@+id/saveClip"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="PCクリップ接続を保存"
+            android:text="Gボードへ同期を保存"
             android:textColor="#FFFFFFFF"
             android:backgroundTint="#FF2B3A5C" />
 

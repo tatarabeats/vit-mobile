@@ -104,6 +104,10 @@
             android:foregroundServiceType="microphone"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
 
+        <service
+            android:name=".ClipSyncService"
+            android:exported="false" />
+
         <receiver
             android:name=".BootReceiver"
             android:exported="true">
