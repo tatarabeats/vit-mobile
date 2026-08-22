@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -332,6 +333,14 @@ class VoiceRecorder(private val ctx: Context) {
         if (apiFailed) {
             val again = PendingRec.noteFailure(ctx, file.absolutePath)
             android.util.Log.d("VIT", "transcribe failed, retry=$again")
+            if (again) {
+                delay(2000)
+                val st = PendingRec.load(ctx)
+                if (st != null && st.path == file.absolutePath && file.exists()) {
+                    finishTranscript(file, recStart, durationMs, insertReady = false, onResult = onResult)
+                    return
+                }
+            }
         } else {
             PendingRec.clearIfPath(ctx, file.absolutePath)
         }

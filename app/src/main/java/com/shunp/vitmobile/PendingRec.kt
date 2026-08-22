@@ -14,8 +14,8 @@ object PendingRec {
     const val TEXT_NAME = "pending_text.json"
     /** 再起動で消える cacheDir ではなく filesDir に置く */
     const val AUDIO_PREFIX = "pending_rec_"
-    /** 失敗したらあと1回だけ拾う。それ以上は捨てる */
-    const val MAX_RETRIES = 1
+    /** 回線失敗は音声を残す。この回数まで同じプロセスで再試行し、超えてもファイルは消さない */
+    const val MAX_RETRIES = 3
 
     data class TextState(val text: String, val ts: Long, val path: String)
 
@@ -140,19 +140,14 @@ object PendingRec {
     }
 
     /**
-     * 書き起こし失敗。あと1回残すか、諦めて消すか。
-     * @return まだ再試行するなら true
+     * 書き起こし失敗。回数を足す。回線失敗ではファイルを消さない。
+     * @return 同じプロセスでまだ再試行するなら true
      */
     fun noteFailure(ctx: Context, path: String): Boolean {
         val cur = load(ctx) ?: return false
         if (cur.path != path) return false
         val next = cur.retries + 1
-        return if (next > MAX_RETRIES) {
-            clearIfPath(ctx, path)
-            false
-        } else {
-            save(ctx, cur.copy(retries = next))
-            true
-        }
+        save(ctx, cur.copy(retries = next))
+        return next <= MAX_RETRIES
     }
 }
