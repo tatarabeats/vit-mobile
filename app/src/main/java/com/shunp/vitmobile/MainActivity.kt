@@ -148,8 +148,10 @@ class MainActivity : AppCompatActivity() {
         b.saveClip.setOnClickListener {
             Prefs.setClipUrl(this, b.clipUrlInput.text.toString())
             Prefs.setClipToken(this, b.clipTokenInput.text.toString())
-            Toast.makeText(this, "保存した", Toast.LENGTH_SHORT).show()
+            ClipSyncService.start(this)
+            Toast.makeText(this, "Gボードへ同期を開始した", Toast.LENGTH_SHORT).show()
         }
+        ClipSyncService.start(this)
         b.btnClip.setOnClickListener { startActivity(Intent(this, ClipActivity::class.java)) }
 
         b.autoEnterSwitch.isChecked = Prefs.isAutoEnterEnabled(this)
