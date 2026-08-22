@@ -28,42 +28,6 @@
             android:textColor="#FF0A0E1A"
             android:backgroundTint="#FFF0C040" />
 
-        <Button
-            android:id="@+id/btnClip"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="PCクリップ"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFE8D5A3" />
-
-        <EditText
-            android:id="@+id/clipUrlInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:hint="PCクリップ URL  (http://192.168.x.x:17890)"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#66FFFFFF"
-            android:inputType="textUri" />
-
-        <EditText
-            android:id="@+id/clipTokenInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="PCクリップ token"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#66FFFFFF"
-            android:inputType="text" />
-
-        <Button
-            android:id="@+id/saveClip"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Gボードへ同期を保存"
-            android:textColor="#FFFFFFFF"
-            android:backgroundTint="#FF2B3A5C" />
-
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/autoEnterSwitch"
             android:layout_width="match_parent"

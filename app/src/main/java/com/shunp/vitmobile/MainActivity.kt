@@ -143,16 +143,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         b.btnHistory.setOnClickListener { startActivity(Intent(this, HistoryActivity::class.java)) }
-        b.clipUrlInput.setText(Prefs.getClipUrl(this))
-        b.clipTokenInput.setText(Prefs.getClipToken(this))
-        b.saveClip.setOnClickListener {
-            Prefs.setClipUrl(this, b.clipUrlInput.text.toString())
-            Prefs.setClipToken(this, b.clipTokenInput.text.toString())
-            ClipSyncService.start(this)
-            Toast.makeText(this, "Gボードへ同期を開始した", Toast.LENGTH_SHORT).show()
-        }
-        ClipSyncService.start(this)
-        b.btnClip.setOnClickListener { startActivity(Intent(this, ClipActivity::class.java)) }
 
         b.autoEnterSwitch.isChecked = Prefs.isAutoEnterEnabled(this)
         b.autoEnterSwitch.setOnCheckedChangeListener { _, checked ->

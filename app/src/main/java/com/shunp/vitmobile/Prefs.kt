@@ -19,9 +19,6 @@ object Prefs {
     private const val KEY_EXCLUDED = "excluded_packages"
     private const val KEY_AUTO_ENTER = "auto_enter_packages"
     private const val KEY_AUTO_ENTER_ON = "auto_enter_enabled"
-    private const val KEY_CLIP_URL = "clip_url"
-    private const val KEY_CLIP_TOKEN = "clip_token"
-    private const val KEY_LAST_CLIP_ID = "last_clip_id"
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
     const val TRIGGER_ZONE = "zone"
@@ -123,33 +120,6 @@ object Prefs {
     fun setGithubToken(ctx: Context, token: String) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_GITHUB_TOKEN, token).apply()
-    }
-
-    fun getClipUrl(ctx: Context): String =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_CLIP_URL, "") ?: ""
-
-    fun setClipUrl(ctx: Context, url: String) {
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_CLIP_URL, url.trim().trimEnd('/')).apply()
-    }
-
-    fun getClipToken(ctx: Context): String =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_CLIP_TOKEN, "") ?: ""
-
-    fun setClipToken(ctx: Context, token: String) {
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_CLIP_TOKEN, token.trim()).apply()
-    }
-
-    fun getLastClipId(ctx: Context): String =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_LAST_CLIP_ID, "") ?: ""
-
-    fun setLastClipId(ctx: Context, id: String) {
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_LAST_CLIP_ID, id).apply()
     }
 
     fun getGroqKey(ctx: Context): String? =
