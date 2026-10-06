@@ -201,14 +201,14 @@ class InputAccessibilityService : AccessibilityService() {
 
         // まず SET_TEXT。クリップボードを汚さずに書き込める
         if (providedText != null && setTextOnNode(node, providedText)) {
-            maybeSendEnter(node)
+            maybeSendEnter(node, providedText)
             return
         }
 
         // SET_TEXT を受け付けない入力欄がある（Brave の検索欄など・2026-08-14）。
         // その時だけクリップボード経由で貼り、直後に元の内容へ戻す。
         if (pasteViaClipboard(node, text)) {
-            maybeSendEnter(node)
+            maybeSendEnter(node, text)
             return
         }
         Log.d(TAG, "insert failed on ${node.className}")
@@ -256,28 +256,45 @@ class InputAccessibilityService : AccessibilityService() {
      * 対象アプリなら挿入後に Enter を送って送信まで済ませる。
      * IME の実行キーを押すのと同じ ACTION_IME_ENTER を使う（Android 11+）。
      */
-    private fun maybeSendEnter(node: AccessibilityNodeInfo) {
+    private fun maybeSendEnter(node: AccessibilityNodeInfo, inserted: String) {
         val pkg = node.packageName?.toString() ?: currentPackage()
         if (!Prefs.isAutoEnter(this, pkg)) {
             Log.d(TAG, "auto enter: skip (not target) pkg=$pkg")
             return
         }
-        // 入力が画面に反映されるまでの間が読めないので、時間差で3回まで試す。
-        // Compose 製アプリは送信ボタンが「文字が入るまで無効」なことがある。
-        val delays = listOf(250L, 700L, 1400L)
+        // 「押せた」ではなく「入力欄から文字が消えた」を成功とみなす。
+        // 以前は1回目（250ms）で送信ボタンがまだ出ていないと、IME_ENTER が true を返すだけで
+        // 送られず、そこで打ち切っていた。Claude で空振りしていたのはこれ（2026-10-06）。
+        val probe = inserted.trim().take(12)
+        val session = ++autoEnterSession
+        val delays = listOf(300L, 700L, 1200L, 1900L, 2800L)
         val h = android.os.Handler(mainLooper)
+        var acted = false
         for ((i, d) in delays.withIndex()) {
             h.postDelayed({
-                if (autoEnterDone == pkg) return@postDelayed
-                if (trySend(node, pkg, i)) autoEnterDone = pkg
+                if (session != autoEnterSession) return@postDelayed
+                if (acted && probe.isNotEmpty() && !inputStillHas(node, probe)) {
+                    diag("attempt=$i sent (input cleared) pkg=$pkg")
+                    autoEnterSession++
+                    return@postDelayed
+                }
+                if (trySend(node, i, last = i == delays.lastIndex)) acted = true
             }, d)
         }
-        h.postDelayed({ autoEnterDone = null }, 2500)
     }
 
-    private var autoEnterDone: String? = null
+    private var autoEnterSession = 0
 
-    private fun trySend(fallback: AccessibilityNodeInfo, pkg: String?, attempt: Int): Boolean {
+    /** 入力欄にまだ挿入した文字が残っているか（残っていれば未送信） */
+    private fun inputStillHas(fallback: AccessibilityNodeInfo, probe: String): Boolean {
+        val focus = try {
+            rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        } catch (_: Exception) { null }
+        val n = focus ?: fallback.also { try { it.refresh() } catch (_: Exception) {} }
+        return n.text?.toString()?.contains(probe) == true
+    }
+
+    private fun trySend(fallback: AccessibilityNodeInfo, attempt: Int, last: Boolean): Boolean {
         val root = try { rootInActiveWindow } catch (_: Exception) { null }
         val focus = try {
             root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: fallback
@@ -285,10 +302,12 @@ class InputAccessibilityService : AccessibilityService() {
 
         // IME の実行キー（ACTION_IME_ENTER）は true を返すのに実際には送信されない
         // アプリがある（Claude で確認・2026-08-14）。当てにせず、送信ボタンを押しに行く。
-        val btn = findSendButton(root)
+        // 位置だけで推測するボタンと IME_ENTER は最後の1回だけ使う（音声モードやモデル選択を押す事故の防止）
+        val btn = findSendButton(root, allowGuess = last)
         if (btn == null) {
             diag("attempt=$attempt send button not found")
-            if (attempt == 2) dumpCandidates(root)
+            if (!last) return false
+            dumpCandidates(root)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 try {
                     if (focus.performAction(
@@ -365,6 +384,8 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     private val sendWords = listOf("送信", "送る", "send", "submit", "post", "reply")
+    /** 送信ボタンの隣にいる、押すと困るもの（音声モード・停止・添付など） */
+    private val notSendWords = listOf("voice", "mic", "音声", "マイク", "dictat", "stop", "停止", "attach", "添付", "feedback")
 
     /**
      * 送信ボタンを探す。2通りで当たりに行く:
@@ -372,7 +393,7 @@ class InputAccessibilityService : AccessibilityService() {
      *  2) 入力欄の **右隣にある小さめの押せるもの**（チャットUIはほぼこの形。
      *     アイコンだけで説明文が無いアプリはこちらで拾う）
      */
-    private fun findSendButton(root: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+    private fun findSendButton(root: AccessibilityNodeInfo?, allowGuess: Boolean): AccessibilityNodeInfo? {
         if (root == null) return null
 
         fun clickableSelfOrParent(n: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
@@ -409,7 +430,9 @@ class InputAccessibilityService : AccessibilityService() {
                 append(" ")
                 append(n.viewIdResourceName?.substringAfterLast('/') ?: "")
             }.trim().lowercase()
-            if (label.isNotEmpty() && label.length <= 40 && sendWords.any { label.contains(it) }) {
+            if (label.isNotEmpty() && label.length <= 40 && sendWords.any { label.contains(it) } &&
+                notSendWords.none { label.contains(it) }
+            ) {
                 val t = clickableSelfOrParent(n)
                 if (t != null) {
                     val tr = Rect()
@@ -417,7 +440,9 @@ class InputAccessibilityService : AccessibilityService() {
                     if (tr.centerY() > byLabelY) { byLabelY = tr.centerY(); byLabel = t }
                 }
             }
-            if (n.isClickable && n.isEnabled && r.width() > 0 && r.height() > 0) {
+            if (n.isClickable && n.isEnabled && r.width() > 0 && r.height() > 0 &&
+                notSendWords.none { label.contains(it) }
+            ) {
                 clickables.add(n to Rect(r))
             }
             for (i in 0 until n.childCount) walk(n.getChild(i))
@@ -425,6 +450,7 @@ class InputAccessibilityService : AccessibilityService() {
         walk(root)
 
         if (byLabel != null) return byLabel
+        if (!allowGuess) return null
 
         // 入力欄の右側で、縦位置が重なっていて、幅が入力欄より明らかに小さいもの
         val ir = inputRect ?: return null

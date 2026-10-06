@@ -94,31 +94,14 @@
             android:padding="12dp"
             android:textSize="13sp" />
 
-        <LinearLayout
-            android:orientation="horizontal"
+        <Button
+            android:id="@+id/pickAutoEnter"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp">
-
-            <Button
-                android:id="@+id/pickAutoEnter"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:text="アプリを選ぶ"
-                android:textColor="#FFFFFFFF"
-                android:backgroundTint="#FF1A2440" />
-
-            <Button
-                android:id="@+id/saveAutoEnter"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="保存"
-                android:textColor="#FF0A0E1A"
-                android:backgroundTint="#FFF0C040" />
-        </LinearLayout>
+            android:layout_marginTop="8dp"
+            android:text="アプリを選ぶ"
+            android:textColor="#FF0A0E1A"
+            android:backgroundTint="#FFF0C040" />
 
         <Button
             android:id="@+id/btnAutoSendDiag"

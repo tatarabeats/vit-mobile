@@ -61,11 +61,15 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "保存した", Toast.LENGTH_SHORT).show()
         }
 
+        // 手で書き換えても保存ボタン不要。打った時点で保存する（駿平 2026-10-06）
         b.autoEnterInput.setText(Prefs.getAutoEnterPackages(this))
-        b.saveAutoEnter.setOnClickListener {
-            Prefs.setAutoEnterPackages(this, b.autoEnterInput.text.toString())
-            Toast.makeText(this, "保存した", Toast.LENGTH_SHORT).show()
-        }
+        b.autoEnterInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, bf: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                Prefs.setAutoEnterPackages(this@MainActivity, s?.toString() ?: "")
+            }
+        })
 
         b.pickAutoEnter.setOnClickListener { pickAppForAutoEnter() }
 
@@ -179,7 +183,10 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    /** インストール済みアプリから選んで、自動Enterの対象に追加する（アイコン付き） */
+    /**
+     * インストール済みアプリから自動送信の対象を選ぶ。
+     * チェックを付けた／外した時点で保存する（保存ボタンは無い）。上の欄で名前検索できる。
+     */
     private fun pickAppForAutoEnter() {
         val pm = packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -192,49 +199,100 @@ class MainActivity : AppCompatActivity() {
                 )
             }
             .distinctBy { it.second }
-            .sortedBy { it.first }
+            .sortedBy { it.first.lowercase() }
         if (apps.isEmpty()) {
             Toast.makeText(this, "アプリ一覧を取得できなかった", Toast.LENGTH_SHORT).show()
             return
         }
-        val adapter = object : android.widget.ArrayAdapter<Triple<String, String, android.graphics.drawable.Drawable>>(
-            this, 0, apps
-        ) {
+
+        fun selected(): MutableSet<String> = b.autoEnterInput.text.toString().lineSequence()
+            .map { it.trim() }.filter { it.isNotEmpty() }.toMutableSet()
+
+        // 選択済みを上に並べる
+        val chosen = selected()
+        val sorted = apps.sortedBy { if (chosen.any { c -> c.equals(it.second, true) }) 0 else 1 }
+        val shown = sorted.toMutableList()
+        val d = resources.displayMetrics.density
+
+        val adapter = object : android.widget.BaseAdapter() {
+            override fun getCount() = shown.size
+            override fun getItem(position: Int) = shown[position]
+            override fun getItemId(position: Int) = position.toLong()
             override fun getView(position: Int, convertView: android.view.View?, parent: android.view.ViewGroup): android.view.View {
-                val row = convertView as? android.widget.LinearLayout ?: android.widget.LinearLayout(context).apply {
+                val row = convertView as? android.widget.LinearLayout ?: android.widget.LinearLayout(this@MainActivity).apply {
                     orientation = android.widget.LinearLayout.HORIZONTAL
                     gravity = android.view.Gravity.CENTER_VERTICAL
-                    val pad = (resources.displayMetrics.density * 12).toInt()
+                    val pad = (d * 12).toInt()
                     setPadding(pad, pad, pad, pad)
                     addView(android.widget.ImageView(context).apply {
-                        val sz = (resources.displayMetrics.density * 40).toInt()
+                        val sz = (d * 40).toInt()
                         layoutParams = android.widget.LinearLayout.LayoutParams(sz, sz).apply {
-                            rightMargin = (resources.displayMetrics.density * 14).toInt()
+                            rightMargin = (d * 14).toInt()
                         }
                     })
                     addView(android.widget.TextView(context).apply {
                         setTextColor(android.graphics.Color.WHITE)
                         textSize = 16f
+                        layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    })
+                    addView(android.widget.CheckBox(context).apply {
+                        isClickable = false
+                        isFocusable = false
                     })
                 }
-                val (label, pkg, icon) = getItem(position)!!
+                val (label, pkg, icon) = shown[position]
                 (row.getChildAt(0) as android.widget.ImageView).setImageDrawable(icon)
                 (row.getChildAt(1) as android.widget.TextView).text = label
+                (row.getChildAt(2) as android.widget.CheckBox).isChecked =
+                    selected().any { it.equals(pkg, ignoreCase = true) }
                 return row
             }
         }
-        AlertDialog.Builder(this)
-            .setTitle("アプリを選ぶ")
-            .setAdapter(adapter) { _, which ->
-                val pkg = apps[which].second
-                val cur = b.autoEnterInput.text.toString().trimEnd()
-                if (!cur.lineSequence().any { it.trim() == pkg }) {
-                    b.autoEnterInput.setText(if (cur.isBlank()) pkg else cur + "\n" + pkg)
-                }
-                Prefs.setAutoEnterPackages(this, b.autoEnterInput.text.toString())
-                Toast.makeText(this, apps[which].first + " を追加した", Toast.LENGTH_SHORT).show()
+
+        val search = android.widget.EditText(this).apply {
+            hint = "検索"
+            setSingleLine()
+            setTextColor(android.graphics.Color.WHITE)
+            setHintTextColor(0x80FFFFFF.toInt())
+        }
+        val list = android.widget.ListView(this).apply {
+            this.adapter = adapter
+            setOnItemClickListener { _, _, position, _ ->
+                val (label, pkg, _) = shown[position]
+                val cur = selected()
+                val on = cur.none { it.equals(pkg, ignoreCase = true) }
+                if (on) cur.add(pkg) else cur.removeAll { it.equals(pkg, ignoreCase = true) }
+                b.autoEnterInput.setText(cur.joinToString("\n"))
+                Prefs.setAutoEnterPackages(this@MainActivity, b.autoEnterInput.text.toString())
+                adapter.notifyDataSetChanged()
+                Toast.makeText(this@MainActivity, label + if (on) " を追加した" else " を外した", Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("閉じる", null)
+        }
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, bf: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val q = s?.toString()?.trim()?.lowercase() ?: ""
+                shown.clear()
+                shown.addAll(if (q.isEmpty()) sorted else sorted.filter {
+                    it.first.lowercase().contains(q) || it.second.lowercase().contains(q)
+                })
+                adapter.notifyDataSetChanged()
+            }
+        })
+        val box = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            val pad = (d * 16).toInt()
+            setPadding(pad, (d * 8).toInt(), pad, 0)
+            addView(search)
+            addView(list, android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * 0.6f).toInt()
+            ))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("自動送信するアプリ")
+            .setView(box)
+            .setPositiveButton("閉じる", null)
             .show()
     }
 
