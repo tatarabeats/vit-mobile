@@ -206,7 +206,23 @@ object Prefs {
         sp.edit().remove(KEY_HISTORY).apply()
     }
 
-    fun addHistory(ctx: Context, text: String, ts: Long = System.currentTimeMillis()) {
+    private val historyLock = Any()
+
+    /** 書き込み途中で落ちても履歴全体が壊れないよう、別ファイルに書いてから差し替える */
+    private fun writeHistoryAtomic(file: File, body: String) {
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        tmp.writeText(body)
+        if (!tmp.renameTo(file)) {
+            file.writeText(body)
+            tmp.delete()
+        }
+    }
+
+    /** 並行して2つの書き起こしが終わっても、片方の履歴が消えないよう直列化する */
+    fun addHistory(ctx: Context, text: String, ts: Long = System.currentTimeMillis()) =
+        synchronized(historyLock) { addHistoryLocked(ctx, text, ts) }
+
+    private fun addHistoryLocked(ctx: Context, text: String, ts: Long) {
         if (text.isBlank()) return
         migrateLegacyHistoryIfNeeded(ctx)
         val file = historyFile(ctx)
@@ -227,7 +243,7 @@ object Prefs {
         for (i in 0 until minOf(arr.length(), MAX_HISTORY - 1)) {
             try { newArr.put(arr.getJSONObject(i)) } catch (_: Exception) {}
         }
-        try { file.writeText(newArr.toString()) } catch (_: Exception) {}
+        try { writeHistoryAtomic(file, newArr.toString()) } catch (_: Exception) {}
     }
 
     /** Pair<タイムスタンプ(ミリ秒), テキスト> のリスト。新しい順 */

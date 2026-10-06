@@ -27,10 +27,18 @@ class VoiceRecorder(private val ctx: Context) {
         private var recoveryStarted = false
 
         /**
+         * 録音中・書き起こし中のファイル。復旧処理はこれに触らない。
+         * 外部ジェスチャーで止めると TriggerActivity が毎回 recoverFrom を呼び、
+         * 録音中のファイルを「声が足りない」と判定して消していた（短い発話ほど消える・2026-10-06）。
+         */
+        private val busyPaths = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+        /**
          * プロセス起動後いちばん早い可靠な入口から呼ぶ。
          * 残っている録音は履歴にだけ入れる。挿入も自動送信もしない。
          */
         fun recoverFrom(ctx: Context) {
+            if (busyPaths.isNotEmpty()) return
             VoiceRecorder(ctx).recoverPending()
         }
 
@@ -75,6 +83,7 @@ class VoiceRecorder(private val ctx: Context) {
                 start()
             }
             recorder = r
+            busyPaths.add(file.absolutePath)
             startMs = System.currentTimeMillis()
             clearAmps()
             PendingRec.write(ctx, file, startMs, emptyList(), 0L)
@@ -228,7 +237,8 @@ class VoiceRecorder(private val ctx: Context) {
     private fun startLevelSampling() {
         scope.launch {
             while (recorder != null) {
-                val amp = amplitude()
+                val amp = readAmp()
+                lastAmp = amp
                 if (amp > 0) {
                     addAmp(amp)
                     flushMarker()
@@ -255,7 +265,15 @@ class VoiceRecorder(private val ctx: Context) {
     }
 
     /** 録音中の音量（0-32767）。0 は無音か録音していない */
-    fun amplitude(): Int = try { recorder?.maxAmplitude ?: 0 } catch (_: Exception) { 0 }
+    fun amplitude(): Int = lastAmp
+
+    /**
+     * maxAmplitude は「前回読んでから」の最大値を返して読むたびに区切られる。
+     * 音量表示（16ms ごと）と声の判定（100ms ごと）が別々に読むと、表示側が山を横取りして
+     * 判定側に声が残らず、短い発話が「無音」で捨てられていた。読むのはここ1か所だけにする。
+     */
+    @Volatile private var lastAmp = 0
+    private fun readAmp(): Int = try { recorder?.maxAmplitude ?: 0 } catch (_: Exception) { 0 }
 
     /** 録音中止（送信せずファイル削除） */
     fun cancel() {
@@ -265,16 +283,23 @@ class VoiceRecorder(private val ctx: Context) {
         startMs = 0
         val file = currentFile
         currentFile = null
+        lastAmp = 0
         PendingRec.clearText(ctx)
-        if (file != null) PendingRec.clearIfPath(ctx, file.absolutePath)
-        else PendingRec.clear(ctx)
+        if (file != null) {
+            PendingRec.clearIfPath(ctx, file.absolutePath)
+            busyPaths.remove(file.absolutePath)
+        } else PendingRec.clear(ctx)
     }
 
     fun stopAndTranscribe(onResult: (String?) -> Unit) {
         val file = currentFile
         val recStart = startMs
         val durationMs = if (recStart > 0) System.currentTimeMillis() - recStart else 0L
+        // 最後の 100ms 未満の区間も拾う（語尾だけの短い発話を落とさない）
+        val tail = readAmp()
+        if (tail > 0) addAmp(tail)
         val samples = snapshotAmps()
+        lastAmp = 0
         try { recorder?.stop() } catch (_: Exception) {}
         try { recorder?.release() } catch (_: Exception) {}
         recorder = null
@@ -284,11 +309,17 @@ class VoiceRecorder(private val ctx: Context) {
         flushStoppedMarker(file, recStart, durationMs, samples)
         if (!hasVoice(durationMs, samples)) {
             PendingRec.clearIfPath(ctx, file.absolutePath)
+            busyPaths.remove(file.absolutePath)
             onResult(null)
             return
         }
+        val voiced = VoiceGate.voicedMs(samples)
         scope.launch {
-            finishTranscript(file, recStart, durationMs, insertReady = true, onResult = onResult)
+            try {
+                finishTranscript(file, recStart, voiced, insertReady = true, onResult = onResult)
+            } finally {
+                busyPaths.remove(file.absolutePath)
+            }
         }
     }
 
@@ -303,7 +334,7 @@ class VoiceRecorder(private val ctx: Context) {
     private suspend fun finishTranscript(
         file: File,
         recStart: Long,
-        durationMs: Long,
+        voicedMs: Long,
         insertReady: Boolean,
         onResult: (String?) -> Unit
     ) {
@@ -312,7 +343,10 @@ class VoiceRecorder(private val ctx: Context) {
         if (text == null) apiFailed = true
         val ts = if (recStart > 0) recStart else System.currentTimeMillis()
         if (!text.isNullOrBlank()) {
-            text = Hallucination.filter(text, durationMs)
+            // 録音の長さではなく「声だった長さ」で幻覚判定する。
+            // 長く録って声が少しだけの時に、黙っていた部分の捏造を通さないため
+            // 声だった長さは録音時間より短く出るので、明確な発話の基準は 500ms にする
+            text = Hallucination.filter(text, voicedMs, clearMs = 500)
             if (!text.isNullOrBlank()) {
                 PendingRec.saveText(ctx, text, ts, file.absolutePath)
                 text = polishAfterFilter(text)
@@ -337,7 +371,7 @@ class VoiceRecorder(private val ctx: Context) {
                 delay(2000)
                 val st = PendingRec.load(ctx)
                 if (st != null && st.path == file.absolutePath && file.exists()) {
-                    finishTranscript(file, recStart, durationMs, insertReady = false, onResult = onResult)
+                    finishTranscript(file, recStart, voicedMs, insertReady = false, onResult = onResult)
                     return
                 }
             }
@@ -380,7 +414,7 @@ class VoiceRecorder(private val ctx: Context) {
         if (!beginRecovery()) return
         scope.launch {
             finishTranscript(
-                file, st.startMs, st.durationMs,
+                file, st.startMs, VoiceGate.voicedMs(st.amps),
                 insertReady = false,
                 onResult = {}
             )

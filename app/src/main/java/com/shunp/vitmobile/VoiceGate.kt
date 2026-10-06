@@ -54,8 +54,11 @@ object VoiceGate {
         if (peak < AMP_FLOOR) return false
         if (voiced < 200) return false
         if (voiced < 350 && peak < LOUD_SHORT) return false
-        if (durationMs >= 3000 && voiced < 800) return false
-        if (durationMs >= 3000 && durationMs > 0 && voiced.toFloat() / durationMs < 0.06f) {
+        // 長い録音で声が少ない＝物音のことが多い。ただしはっきりした声なら
+        // 「はい」を言ってから止めるのが遅れただけなので通す（捏造は Hallucination 側で声の長さで落とす）
+        val loud = peak >= LOUD_SHORT
+        if (durationMs >= 3000 && voiced < 800 && !loud) return false
+        if (durationMs >= 3000 && voiced.toFloat() / durationMs < 0.06f && !loud) {
             return false
         }
         return true

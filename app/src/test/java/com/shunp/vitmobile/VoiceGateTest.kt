@@ -43,9 +43,16 @@ class VoiceGateTest {
     }
 
     @Test
-    fun longRecordingWithLittleVoiceIsSkipped() {
-        val amps = List(5) { 9000 } + List(45) { 300 }
+    fun longRecordingWithLittleQuietSoundIsSkipped() {
+        val amps = List(5) { 2000 } + List(45) { 300 }
         assertFalse(VoiceGate.hasVoice(amps, 5000))
+    }
+
+    @Test
+    fun clearShortReplyInLongRecordingPasses() {
+        // 「はい」と言ってから止めるのが遅れた
+        val amps = List(4) { 9000 } + List(46) { 300 }
+        assertTrue(VoiceGate.hasVoice(amps, 5000))
     }
 
     @Test

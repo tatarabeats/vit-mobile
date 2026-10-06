@@ -23,6 +23,12 @@ class MainActivity : AppCompatActivity() {
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
         VoiceRecorder.recoverFrom(this)
+        // マイク権限が無いと録音が黙って失敗する（入れ直し・権限の取り消し後）
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
+        }
 
         b.apiKeyInput.setText(Prefs.getGroqKey(this) ?: "")
         b.saveApiKey.setOnClickListener {

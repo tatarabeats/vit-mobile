@@ -133,6 +133,10 @@ class InputAccessibilityService : AccessibilityService() {
             && e.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED
         ) return
         val src = e.source ?: return
+        // 画面の書き換えイベントは、カーソルが入っていない入力欄でも飛んでくる。
+        // それを覚えると、触っていない欄（ブラウザの検索欄等）へ入れてしまうので除く
+        if (e.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && !src.isFocused) return
+        if (src.packageName?.toString() == packageName) return
         if (looksLikeInput(src)) {
             val r = Rect()
             src.getBoundsInScreen(r)
@@ -186,11 +190,16 @@ class InputAccessibilityService : AccessibilityService() {
      */
     fun findAppRoot(): AccessibilityNodeInfo? {
         val own = packageName
+        val ws = try { windows } catch (_: Exception) { null }
         try {
             val active = rootInActiveWindow
-            if (active != null && active.packageName?.toString() != own) return active
+            if (active != null && active.packageName?.toString() != own) {
+                val w = ws?.firstOrNull { it.id == active.windowId }
+                // キーボードやシステムの窓が「アクティブ」なこともあるので、アプリの窓の時だけ採用
+                if (w == null || w.type == AccessibilityWindowInfo.TYPE_APPLICATION) return active
+            }
         } catch (_: Exception) {}
-        val ws = try { windows } catch (_: Exception) { null } ?: return null
+        if (ws == null) return null
         var best: AccessibilityNodeInfo? = null
         var bestScore = Int.MIN_VALUE
         for (w in ws) {
@@ -296,7 +305,7 @@ class InputAccessibilityService : AccessibilityService() {
         if (direct && setTextOnNode(node, existing, text)) {
             // SET_TEXT が true を返しても反映しないアプリがあるので、入ったか確かめてから次へ
             handler.postDelayed({
-                if (textLanded(node, text)) {
+                if (textLanded(node, existing, text)) {
                     diag("insert: set_text ok pkg=$pkg len=${text.length}")
                     maybeSendEnter(node, text, before)
                 } else if (pasteViaClipboard(node, text)) {
@@ -332,13 +341,15 @@ class InputAccessibilityService : AccessibilityService() {
         return t
     }
 
-    private fun textLanded(node: AccessibilityNodeInfo, text: String): Boolean {
+    private fun textLanded(node: AccessibilityNodeInfo, existing: String, text: String): Boolean {
         val probe = text.trim().take(12)
         if (probe.isEmpty()) return true
         val n = refreshed(node)
         val now = n.text?.toString()
         // 中身を読ませないアプリ（null）は確かめようがないので入ったとみなす
-        return now == null || now.contains(probe)
+        if (now == null) return true
+        // 元から同じ言葉が入っていた時に「入った」と誤判定しないよう、前後で変わったかも見る
+        return now != existing && now.contains(probe)
     }
 
     private fun refreshed(node: AccessibilityNodeInfo): AccessibilityNodeInfo {
@@ -430,17 +441,30 @@ class InputAccessibilityService : AccessibilityService() {
         }
         val probe = inserted.trim().take(12)
         val session = ++autoEnterSession
-        val delays = listOf(150L, 450L, 850L, 1400L, 2100L, 3000L)
+        val delays = listOf(150L, 450L, 850L, 1400L, 2100L, 3000L, 3800L)
         var acted = false
         for ((i, d) in delays.withIndex()) {
             handler.postDelayed({
                 if (session != autoEnterSession) return@postDelayed
+                // 待っている間に別のアプリへ移ったら、移った先のボタンは押さない
+                val nowPkg = currentPackage()
+                if (nowPkg != null && !nowPkg.equals(pkg, ignoreCase = true)) {
+                    diag("attempt=$i abort: app changed $pkg -> $nowPkg")
+                    autoEnterSession++
+                    return@postDelayed
+                }
                 if (acted && probe.isNotEmpty() && !inputStillHas(node, probe)) {
                     diag("attempt=$i sent (input cleared) pkg=$pkg")
                     autoEnterSession++
                     return@postDelayed
                 }
-                if (trySend(node, before, i, last = i == delays.lastIndex)) acted = true
+                if (i == delays.lastIndex) {
+                    // 最後は確認だけ
+                    diag("attempt=$i gave up pkg=$pkg")
+                    return@postDelayed
+                }
+                // 一度押しても文字が残っている＝クリックを受け付けたふりのアプリ。次は指と同じタップで押す
+                if (trySend(node, before, i, last = i == delays.lastIndex - 1, preferTap = acted)) acted = true
             }, d)
         }
     }
@@ -453,7 +477,13 @@ class InputAccessibilityService : AccessibilityService() {
         return n.text?.toString()?.contains(probe) == true
     }
 
-    private fun trySend(fallback: AccessibilityNodeInfo, before: List<Spot>, attempt: Int, last: Boolean): Boolean {
+    private fun trySend(
+        fallback: AccessibilityNodeInfo,
+        before: List<Spot>,
+        attempt: Int,
+        last: Boolean,
+        preferTap: Boolean
+    ): Boolean {
         val root = findAppRoot()
         val focus = findFocusedInput() ?: fallback
 
@@ -482,7 +512,7 @@ class InputAccessibilityService : AccessibilityService() {
         btn.getBoundsInScreen(r)
 
         // 2) ノードのクリック
-        if (btn.isEnabled && btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+        if (!preferTap && btn.isEnabled && btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
             diag("attempt=$attempt node click ok rect=$r desc=${btn.contentDescription}")
             return true
         }
@@ -593,9 +623,15 @@ class InputAccessibilityService : AccessibilityService() {
                 append(n.viewIdResourceName?.substringAfterLast('/') ?: "")
             }.trim().lowercase()
             val bad = notSendWords.any { label.contains(it) }
-            if (label.isNotEmpty() && label.length <= 40 && !bad && sendWords.any { label.contains(it) }) {
+            // 入力欄そのもの（「これを送信して」と喋った本文など）は送信ボタンではない
+            if (!n.isEditable && label.isNotEmpty() && label.length <= 40 && !bad &&
+                sendWords.any { label.contains(it) }
+            ) {
                 val t = clickableSelfOrParent(n)
-                if (t != null) {
+                val tr0 = Rect()
+                t?.getBoundsInScreen(tr0)
+                // 入力欄ごと包む大きな枠まで親をたどった場合は採らない
+                if (t != null && !t.isEditable && (ir.isEmpty || tr0.width() <= ir.width() * 0.6f)) {
                     val tr = Rect()
                     t.getBoundsInScreen(tr)
                     if (nearInput(tr) && tr.centerY() > byLabelY) { byLabelY = tr.centerY(); byLabel = t }
@@ -639,7 +675,9 @@ class InputAccessibilityService : AccessibilityService() {
         val pkg = root.packageName?.toString() ?: return null
         if (!pkg.equals(lastFocusedPackage ?: "", ignoreCase = true)) return null
         val bounds = lastFocusedBounds ?: return null
-        val n = searchByBounds(root, bounds) ?: searchInput(root) ?: return null
+        // 座標が完全一致しなければ、同じ種類で近くにある入力欄だけ拾う（キーボードの出入りで少しずれる分）。
+        // 画面のどこかの入力欄に入れると、触っていない検索欄に入る事故になる
+        val n = searchByBounds(root, bounds) ?: searchNear(root, bounds) ?: return null
         n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         Log.d(TAG, "recovered last input in $pkg")
         return n
@@ -653,14 +691,25 @@ class InputAccessibilityService : AccessibilityService() {
                 || cn.contains("TextInput", ignoreCase = true)
     }
 
-    private fun searchInput(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (looksLikeInput(node)) return node
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val found = searchInput(child)
-            if (found != null) return found
+    /** 覚えていた位置の近く（縦横 300px 以内）にある、同じ種類の見えている入力欄 */
+    private fun searchNear(root: AccessibilityNodeInfo, target: Rect): AccessibilityNodeInfo? {
+        val limit = 300
+        var best: AccessibilityNodeInfo? = null
+        var bestD = Int.MAX_VALUE
+        fun walk(n: AccessibilityNodeInfo?) {
+            if (n == null) return
+            if (n.isVisibleToUser && looksLikeInput(n) &&
+                (lastFocusedClass == null || n.className?.toString() == lastFocusedClass)
+            ) {
+                val r = Rect()
+                n.getBoundsInScreen(r)
+                val d = kotlin.math.abs(r.centerX() - target.centerX()) + kotlin.math.abs(r.centerY() - target.centerY())
+                if (d <= limit && d < bestD) { bestD = d; best = n }
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i))
         }
-        return null
+        walk(root)
+        return best
     }
 
     private fun searchByBounds(node: AccessibilityNodeInfo, target: Rect): AccessibilityNodeInfo? {

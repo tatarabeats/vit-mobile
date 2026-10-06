@@ -680,8 +680,13 @@ class OverlayService : Service() {
         buzz(20, 60, 20)
         showStatus("busy")
         recorder?.stopAndTranscribe { text ->
-            hideStatus()
-            if (text.isNullOrBlank()) { flashStatus("idle"); buzz(200); return@stopAndTranscribe }
+            // 書き起こし中に次の録音を始めていたら、その録音中表示を消さない
+            if (!isRecording) hideStatus()
+            if (text.isNullOrBlank()) {
+                if (!isRecording) flashStatus("idle")
+                buzz(200)
+                return@stopAndTranscribe
+            }
             if (wasFeedback) Feedback.submit(this, text) else copyAndPaste(text)
         }
     }
@@ -702,7 +707,7 @@ class OverlayService : Service() {
         updateZoneVisual()
         buzz(120)
         showStatus("busy")
-        recorder?.stopAndTranscribe { hideStatus() }
+        recorder?.stopAndTranscribe { if (!isRecording) hideStatus() }
     }
 
     // ==================== 状態表示（画面最上部の細いライン） ====================

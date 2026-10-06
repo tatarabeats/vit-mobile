@@ -34,12 +34,12 @@ object Hallucination {
 
     /**
      * @param text Whisper出力テキスト
-     * @param durationMs 録音時間ミリ秒。>= 800 なら明確な発話と判定して幻覚フィルタを緩和
+     * @param durationMs 声だった長さ（ミリ秒、VoiceGate.voicedMs）。>= 800 なら明確な発話と判定して幻覚フィルタを緩和
      * @return フィルタ後テキスト（全部削除なら空文字列）
      */
-    fun filter(text: String, durationMs: Long = 0): String {
+    fun filter(text: String, durationMs: Long = 0, clearMs: Long = 800): String {
         if (text.isBlank()) return text
-        val isClearSpeech = durationMs >= 800
+        val isClearSpeech = durationMs >= clearMs
         if (isClearSpeech) return text
 
         val clean = text.trim().trimEnd('。', '.', '、', ',', '！', '!', '？', '?')
