@@ -105,8 +105,11 @@ object Prefs {
             .edit().putBoolean(KEY_AUTO_ENTER_ON, on).apply()
     }
 
-    fun isAutoEnter(ctx: Context, pkg: String?): Boolean {
-        if (!isAutoEnterEnabled(ctx)) return false
+    fun isAutoEnter(ctx: Context, pkg: String?): Boolean =
+        isAutoEnterEnabled(ctx) && isAutoEnterApp(ctx, pkg)
+
+    /** 自動送信の一覧に載っているアプリか（ON/OFF に関係なく）。チャット系として入力欄を自分で選んでよい */
+    fun isAutoEnterApp(ctx: Context, pkg: String?): Boolean {
         if (pkg.isNullOrBlank()) return false
         return getAutoEnterPackages(ctx).lineSequence()
             .map { it.trim() }

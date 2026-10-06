@@ -24,8 +24,21 @@ class VoiceGateTest {
     }
 
     @Test
-    fun shortBurstBelow350msIsSkipped() {
+    fun shortLoudReplyPasses() {
+        // 「はい」程度（300ms）でもはっきりした声なら送る
         val amps = List(3) { 9000 } + List(20) { 200 }
+        assertTrue(VoiceGate.hasVoice(amps, 2300))
+    }
+
+    @Test
+    fun singleClickNoiseIsSkipped() {
+        val amps = List(1) { 9000 } + List(20) { 200 }
+        assertFalse(VoiceGate.hasVoice(amps, 2300))
+    }
+
+    @Test
+    fun shortQuietBurstIsSkipped() {
+        val amps = List(3) { 900 } + List(20) { 200 }
         assertFalse(VoiceGate.hasVoice(amps, 2300))
     }
 

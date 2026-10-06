@@ -36,9 +36,14 @@ object VoiceGate {
         return usable.count { it > threshold } * FRAME_MS
     }
 
+    /** これ以上の大きさがあれば、短い声（「はい」「OK」等）でも声とみなす */
+    const val LOUD_SHORT = 2500
+
     /**
-     * 送ってよい中身か。時間ゲートは従来どおり:
-     *  voicedMs < 350 → 捨てる
+     * 送ってよい中身か:
+     *  voicedMs < 200 → 捨てる（物音1発）
+     *  voicedMs < 350 で、ピークが LOUD_SHORT 未満 → 捨てる
+     *    以前は 350ms 未満を一律に捨てていて、「はい」等の短い返事が入らなかった（2026-10-06）
      *  duration ≥ 3000 かつ (voicedMs < 800 または 比率 < 6%) → 捨てる
      */
     fun hasVoice(amps: List<Int>, durationMs: Long): Boolean {
@@ -47,7 +52,8 @@ object VoiceGate {
         val peak = usable.maxOrNull() ?: 0
         val voiced = voicedMs(usable, threshold)
         if (peak < AMP_FLOOR) return false
-        if (voiced < 350) return false
+        if (voiced < 200) return false
+        if (voiced < 350 && peak < LOUD_SHORT) return false
         if (durationMs >= 3000 && voiced < 800) return false
         if (durationMs >= 3000 && durationMs > 0 && voiced.toFloat() / durationMs < 0.06f) {
             return false

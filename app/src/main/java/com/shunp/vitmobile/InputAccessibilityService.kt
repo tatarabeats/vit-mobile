@@ -35,7 +35,7 @@ class InputAccessibilityService : AccessibilityService() {
         fun currentPackage(): String? {
             val svc = instance ?: return null
             return try {
-                svc.rootInActiveWindow?.packageName?.toString()
+                svc.findAppRoot()?.packageName?.toString()
             } catch (_: Exception) {
                 null
             }
@@ -49,9 +49,7 @@ class InputAccessibilityService : AccessibilityService() {
         fun hasFocusedEditable(): Boolean {
             val svc = instance ?: return false
             return try {
-                val root = svc.rootInActiveWindow ?: return false
-                val n = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
-                n.isEditable || (n.className?.toString()?.contains("Edit", true) == true)
+                svc.findFocusedInput() != null
             } catch (_: Exception) {
                 false
             }
@@ -177,41 +175,183 @@ class InputAccessibilityService : AccessibilityService() {
         return false
     }
 
+    private val handler by lazy { android.os.Handler(mainLooper) }
+
+    // ==================== 前面アプリの窓と入力欄 ====================
+
+    /**
+     * 前面アプリの窓の根。VIT 自身とキーボードの窓は除く。
+     * rootInActiveWindow は、録音を止めるために VIT の帯・マイクに触った直後だと
+     * VIT 自身を指すことがあり、入力欄を見失って何も入らない原因になっていた（2026-10-06）。
+     */
+    fun findAppRoot(): AccessibilityNodeInfo? {
+        val own = packageName
+        try {
+            val active = rootInActiveWindow
+            if (active != null && active.packageName?.toString() != own) return active
+        } catch (_: Exception) {}
+        val ws = try { windows } catch (_: Exception) { null } ?: return null
+        var best: AccessibilityNodeInfo? = null
+        var bestScore = Int.MIN_VALUE
+        for (w in ws) {
+            if (w.type != AccessibilityWindowInfo.TYPE_APPLICATION) continue
+            val r = try { w.root } catch (_: Exception) { null } ?: continue
+            if (r.packageName?.toString() == own) continue
+            // 入力フォーカスを持つ窓 > アクティブな窓 > 手前の窓
+            val score = (if (w.isFocused) 1_000_000 else 0) +
+                (if (w.isActive) 100_000 else 0) + w.layer
+            if (score > bestScore) { bestScore = score; best = r }
+        }
+        return best
+    }
+
+    /** 前面アプリで、今カーソルが入っている入力欄 */
+    fun findFocusedInput(): AccessibilityNodeInfo? {
+        val own = packageName
+        val f = try { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) } catch (_: Exception) { null }
+        if (f != null && f.packageName?.toString() != own && looksLikeInput(f)) return f
+        val root = findAppRoot() ?: return null
+        val g = try { root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) } catch (_: Exception) { null }
+        if (g != null && looksLikeInput(g)) return g
+        val a = try { root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY) } catch (_: Exception) { null }
+        if (a != null && looksLikeInput(a)) return a
+        return null
+    }
+
+    /**
+     * 文字を入れる先を決める。
+     *  1) カーソルが入っている入力欄
+     *  2) 録音前に触っていた入力欄（同じアプリの中だけ）
+     *  3) 自動送信の対象アプリ（AIチャット等）なら、画面の一番下の入力欄を自分で選ぶ。
+     *     チャットは入力欄が実質1つなので、タップしていなくても入れてよい（駿平 2026-10-06）。
+     *     それ以外のアプリ（ブラウザ等）では勝手に検索欄へ入る事故があったので、選んだ欄にだけ入れる。
+     */
+    private fun findTargetInput(): AccessibilityNodeInfo? {
+        findFocusedInput()?.let { return it }
+        recoverLastInput()?.let { return it }
+        val root = findAppRoot() ?: return null
+        val pkg = root.packageName?.toString()
+        if (!Prefs.isAutoEnterApp(this, pkg)) return null
+        val n = bottomInput(root) ?: return null
+        n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        diag("insert: picked composer by itself pkg=$pkg")
+        return n
+    }
+
+    /** 画面に見えている入力欄のうち一番下のもの（チャットの入力欄） */
+    private fun bottomInput(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        var best: AccessibilityNodeInfo? = null
+        var bestBottom = -1
+        fun walk(n: AccessibilityNodeInfo?) {
+            if (n == null) return
+            if (n.isVisibleToUser && n.isEditable) {
+                val r = Rect()
+                n.getBoundsInScreen(r)
+                if (r.width() > 0 && r.height() > 0 && r.bottom > bestBottom) {
+                    bestBottom = r.bottom
+                    best = n
+                }
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i))
+        }
+        walk(root)
+        return best
+    }
+
+    // ==================== 挿入 ====================
+
     private fun pasteOrSetText(providedText: String?) {
         Log.d(TAG, "=== pasteOrSetText text=${providedText?.take(30)} ===")
-        // フォーカスが当たっている入力欄にだけ入れる。
-        // 以前は画面内から入力欄を探し回っていたため、ブラウザを開いているだけで
-        // 検索欄に勝手に入っていた。選んでいない場所には入れない（駿平 2026-08-13）。
-        // ブラウザは、ジェスチャー起動で一瞬フォーカスが外れると検索欄のフォーカスも落ちる。
-        // その場合だけ「録音前に触っていた入力欄」を同じアプリの中から拾い直す。
-        // 別アプリには絶対に入れない（駿平 2026-08-14）。
-        val node = findFocusedNode() ?: recoverLastInput()
-        if (node == null) {
-            Log.d(TAG, "no node found")
-            return
-        }
-        Log.d(TAG, "node class=${node.className} pkg=${node.packageName} focused=${node.isFocused} editable=${node.isEditable}")
-        Log.d(TAG, "node actions=${node.actionList.map { it.id to it.label }}")
-
         val text = providedText ?: getClipboardText()
         if (text.isNullOrEmpty()) {
             Log.d(TAG, "no text to paste")
             return
         }
+        insertWithRetry(text, direct = providedText != null, attempt = 0)
+    }
+
+    /**
+     * 入力欄が見つかるまで少し待ってやり直す。
+     * 録音を止めた直後は窓の切り替えが落ち着いておらず、短い発話ほど書き起こしが速く返るので
+     * 「まだ VIT の窓が前面」の瞬間に当たりやすかった（短いと入らない、の原因）。
+     */
+    private fun insertWithRetry(text: String, direct: Boolean, attempt: Int) {
+        val node = try { findTargetInput() } catch (_: Exception) { null }
+        if (node == null) {
+            if (attempt < 6) {
+                handler.postDelayed({ insertWithRetry(text, direct, attempt + 1) }, 150)
+                return
+            }
+            diag("insert: no input found pkg=${currentPackage()}")
+            toastMain("入力欄が見つからなかった（履歴に残っています）")
+            return
+        }
+        Log.d(TAG, "node class=${node.className} pkg=${node.packageName} focused=${node.isFocused} editable=${node.isEditable}")
+        val pkg = node.packageName?.toString()
+        val before = snapshotClickables(findAppRoot())
+        val existing = currentText(node)
 
         // まず SET_TEXT。クリップボードを汚さずに書き込める
-        if (providedText != null && setTextOnNode(node, providedText)) {
-            maybeSendEnter(node, providedText)
+        if (direct && setTextOnNode(node, existing, text)) {
+            // SET_TEXT が true を返しても反映しないアプリがあるので、入ったか確かめてから次へ
+            handler.postDelayed({
+                if (textLanded(node, text)) {
+                    diag("insert: set_text ok pkg=$pkg len=${text.length}")
+                    maybeSendEnter(node, text, before)
+                } else if (pasteViaClipboard(node, text)) {
+                    diag("insert: set_text ignored, pasted pkg=$pkg")
+                    maybeSendEnter(node, text, before)
+                } else {
+                    diag("insert: failed after set_text pkg=$pkg")
+                    toastMain("入力できなかった（履歴に残っています）")
+                }
+            }, 120)
             return
         }
 
         // SET_TEXT を受け付けない入力欄がある（Brave の検索欄など・2026-08-14）。
         // その時だけクリップボード経由で貼り、直後に元の内容へ戻す。
         if (pasteViaClipboard(node, text)) {
-            maybeSendEnter(node, text)
+            diag("insert: pasted pkg=$pkg")
+            maybeSendEnter(node, text, before)
             return
         }
-        Log.d(TAG, "insert failed on ${node.className}")
+        diag("insert: failed on ${node.className} pkg=$pkg")
+        toastMain("入力できなかった（履歴に残っています）")
+    }
+
+    /** 入力欄の今の中身。何も無い時にヒント文（「メッセージ」等）を返すアプリがあるので除く */
+    private fun currentText(node: AccessibilityNodeInfo): String {
+        val t = node.text?.toString() ?: return ""
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (node.isShowingHintText) return ""
+            val hint = node.hintText?.toString()
+            if (!hint.isNullOrEmpty() && t == hint) return ""
+        }
+        return t
+    }
+
+    private fun textLanded(node: AccessibilityNodeInfo, text: String): Boolean {
+        val probe = text.trim().take(12)
+        if (probe.isEmpty()) return true
+        val n = refreshed(node)
+        val now = n.text?.toString()
+        // 中身を読ませないアプリ（null）は確かめようがないので入ったとみなす
+        return now == null || now.contains(probe)
+    }
+
+    private fun refreshed(node: AccessibilityNodeInfo): AccessibilityNodeInfo {
+        val f = findFocusedInput()
+        if (f != null) return f
+        try { node.refresh() } catch (_: Exception) {}
+        return node
+    }
+
+    private fun toastMain(msg: String) {
+        handler.post {
+            try { android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show() } catch (_: Exception) {}
+        }
     }
 
     /** クリップボードに一時的に置いて ACTION_PASTE で貼る。終わったら元に戻す */
@@ -227,7 +367,7 @@ class InputAccessibilityService : AccessibilityService() {
                 ok = node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
             }
             Log.d(TAG, "clipboard paste ok=$ok")
-            android.os.Handler(mainLooper).postDelayed({
+            handler.postDelayed({
                 try { if (backup != null) cm.setPrimaryClip(backup) } catch (_: Exception) {}
             }, 800)
             ok
@@ -237,8 +377,7 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     /** 既存テキストの後ろに追記する形で入力欄へ書き込む */
-    private fun setTextOnNode(node: AccessibilityNodeInfo, text: String): Boolean {
-        val existing = node.text?.toString() ?: ""
+    private fun setTextOnNode(node: AccessibilityNodeInfo, existing: String, text: String): Boolean {
         val combined = if (existing.isEmpty()) text else "$existing$text"
         val bundle = Bundle().apply {
             putCharSequence(
@@ -252,33 +391,56 @@ class InputAccessibilityService : AccessibilityService() {
         return ok
     }
 
+    // ==================== 自動送信 ====================
+
     /**
-     * 対象アプリなら挿入後に Enter を送って送信まで済ませる。
-     * IME の実行キーを押すのと同じ ACTION_IME_ENTER を使う（Android 11+）。
+     * 押せる要素の名前（id・説明・種類）と状態。挿入の前後で比べて「文字が入って出てきた／押せるようになったボタン」を探す。
+     * 位置で比べないのは、キーボードが開いたり入力欄が伸びたりすると全部の位置がずれて誤判定するため。
      */
-    private fun maybeSendEnter(node: AccessibilityNodeInfo, inserted: String) {
+    private data class Spot(val key: String, val enabled: Boolean)
+
+    private fun spotKey(n: AccessibilityNodeInfo): String =
+        "${n.viewIdResourceName}|${n.contentDescription}|${n.className}"
+
+    private fun snapshotClickables(root: AccessibilityNodeInfo?): List<Spot> {
+        if (root == null) return emptyList()
+        val out = mutableListOf<Spot>()
+        fun walk(n: AccessibilityNodeInfo?) {
+            if (n == null) return
+            if (n.isClickable && n.isVisibleToUser) {
+                out.add(Spot(spotKey(n), n.isEnabled))
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i))
+        }
+        try { walk(root) } catch (_: Exception) {}
+        return out
+    }
+
+    /**
+     * 対象アプリなら挿入後に送信ボタンを押して送信まで済ませる。
+     * 「押せた」ではなく「入力欄から文字が消えた」を成功とみなす。
+     * 以前は1回目（250ms）で送信ボタンがまだ出ていないと、IME_ENTER が true を返すだけで
+     * 送られず、そこで打ち切っていた。Claude で空振りしていたのはこれ（2026-10-06）。
+     */
+    private fun maybeSendEnter(node: AccessibilityNodeInfo, inserted: String, before: List<Spot>) {
         val pkg = node.packageName?.toString() ?: currentPackage()
         if (!Prefs.isAutoEnter(this, pkg)) {
             Log.d(TAG, "auto enter: skip (not target) pkg=$pkg")
             return
         }
-        // 「押せた」ではなく「入力欄から文字が消えた」を成功とみなす。
-        // 以前は1回目（250ms）で送信ボタンがまだ出ていないと、IME_ENTER が true を返すだけで
-        // 送られず、そこで打ち切っていた。Claude で空振りしていたのはこれ（2026-10-06）。
         val probe = inserted.trim().take(12)
         val session = ++autoEnterSession
-        val delays = listOf(300L, 700L, 1200L, 1900L, 2800L)
-        val h = android.os.Handler(mainLooper)
+        val delays = listOf(150L, 450L, 850L, 1400L, 2100L, 3000L)
         var acted = false
         for ((i, d) in delays.withIndex()) {
-            h.postDelayed({
+            handler.postDelayed({
                 if (session != autoEnterSession) return@postDelayed
                 if (acted && probe.isNotEmpty() && !inputStillHas(node, probe)) {
                     diag("attempt=$i sent (input cleared) pkg=$pkg")
                     autoEnterSession++
                     return@postDelayed
                 }
-                if (trySend(node, i, last = i == delays.lastIndex)) acted = true
+                if (trySend(node, before, i, last = i == delays.lastIndex)) acted = true
             }, d)
         }
     }
@@ -287,23 +449,18 @@ class InputAccessibilityService : AccessibilityService() {
 
     /** 入力欄にまだ挿入した文字が残っているか（残っていれば未送信） */
     private fun inputStillHas(fallback: AccessibilityNodeInfo, probe: String): Boolean {
-        val focus = try {
-            rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-        } catch (_: Exception) { null }
-        val n = focus ?: fallback.also { try { it.refresh() } catch (_: Exception) {} }
+        val n = refreshed(fallback)
         return n.text?.toString()?.contains(probe) == true
     }
 
-    private fun trySend(fallback: AccessibilityNodeInfo, attempt: Int, last: Boolean): Boolean {
-        val root = try { rootInActiveWindow } catch (_: Exception) { null }
-        val focus = try {
-            root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: fallback
-        } catch (_: Exception) { fallback }
+    private fun trySend(fallback: AccessibilityNodeInfo, before: List<Spot>, attempt: Int, last: Boolean): Boolean {
+        val root = findAppRoot()
+        val focus = findFocusedInput() ?: fallback
 
         // IME の実行キー（ACTION_IME_ENTER）は true を返すのに実際には送信されない
         // アプリがある（Claude で確認・2026-08-14）。当てにせず、送信ボタンを押しに行く。
         // 位置だけで推測するボタンと IME_ENTER は最後の1回だけ使う（音声モードやモデル選択を押す事故の防止）
-        val btn = findSendButton(root, allowGuess = last)
+        val btn = findSendButton(root, focus, before, allowGuess = last)
         if (btn == null) {
             diag("attempt=$attempt send button not found")
             if (!last) return false
@@ -326,7 +483,7 @@ class InputAccessibilityService : AccessibilityService() {
 
         // 2) ノードのクリック
         if (btn.isEnabled && btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-            diag("attempt=$attempt node click ok rect=$r")
+            diag("attempt=$attempt node click ok rect=$r desc=${btn.contentDescription}")
             return true
         }
 
@@ -388,12 +545,18 @@ class InputAccessibilityService : AccessibilityService() {
     private val notSendWords = listOf("voice", "mic", "音声", "マイク", "dictat", "stop", "停止", "attach", "添付", "feedback")
 
     /**
-     * 送信ボタンを探す。2通りで当たりに行く:
+     * 送信ボタンを探す。3通りで当たりに行く:
      *  1) ラベル（contentDescription / text / viewId）に「送信」系の語があるもの
-     *  2) 入力欄の **右隣にある小さめの押せるもの**（チャットUIはほぼこの形。
-     *     アイコンだけで説明文が無いアプリはこちらで拾う）
+     *  2) 文字を入れる前には無かった／押せなかったのに、入れた後に押せるようになったもの
+     *     （チャットUIは文字が入ると送信ボタンが出る・有効になる。アイコンだけのアプリもこれで拾う）
+     *  3) 最後の1回だけ: 入力欄の右側にある一番右の小さい押せるもの
      */
-    private fun findSendButton(root: AccessibilityNodeInfo?, allowGuess: Boolean): AccessibilityNodeInfo? {
+    private fun findSendButton(
+        root: AccessibilityNodeInfo?,
+        input: AccessibilityNodeInfo,
+        before: List<Spot>,
+        allowGuess: Boolean
+    ): AccessibilityNodeInfo? {
         if (root == null) return null
 
         fun clickableSelfOrParent(n: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
@@ -407,21 +570,20 @@ class InputAccessibilityService : AccessibilityService() {
             return null
         }
 
+        val ir = Rect()
+        try { input.getBoundsInScreen(ir) } catch (_: Exception) {}
+        val band = maxOf(ir.height(), (resources.displayMetrics.density * 72).toInt())
+        fun nearInput(r: Rect): Boolean =
+            ir.isEmpty || r.centerY() in (ir.top - band)..(ir.bottom + band)
+
         var byLabel: AccessibilityNodeInfo? = null
         var byLabelY = -1
         val clickables = mutableListOf<Pair<AccessibilityNodeInfo, Rect>>()
-        var inputRect: Rect? = null
 
         fun walk(n: AccessibilityNodeInfo?) {
             if (n == null) return
             val r = Rect()
             n.getBoundsInScreen(r)
-
-            if (n.isFocused && (n.isEditable ||
-                    n.className?.toString()?.contains("Edit", true) == true)
-            ) {
-                inputRect = Rect(r)
-            }
 
             val label = buildString {
                 append(n.contentDescription?.toString() ?: "")
@@ -430,18 +592,17 @@ class InputAccessibilityService : AccessibilityService() {
                 append(" ")
                 append(n.viewIdResourceName?.substringAfterLast('/') ?: "")
             }.trim().lowercase()
-            if (label.isNotEmpty() && label.length <= 40 && sendWords.any { label.contains(it) } &&
-                notSendWords.none { label.contains(it) }
-            ) {
+            val bad = notSendWords.any { label.contains(it) }
+            if (label.isNotEmpty() && label.length <= 40 && !bad && sendWords.any { label.contains(it) }) {
                 val t = clickableSelfOrParent(n)
                 if (t != null) {
                     val tr = Rect()
                     t.getBoundsInScreen(tr)
-                    if (tr.centerY() > byLabelY) { byLabelY = tr.centerY(); byLabel = t }
+                    if (nearInput(tr) && tr.centerY() > byLabelY) { byLabelY = tr.centerY(); byLabel = t }
                 }
             }
-            if (n.isClickable && n.isEnabled && r.width() > 0 && r.height() > 0 &&
-                notSendWords.none { label.contains(it) }
+            if (n.isClickable && n.isEnabled && n.isVisibleToUser && !n.isEditable &&
+                r.width() > 0 && r.height() > 0 && !bad
             ) {
                 clickables.add(n to Rect(r))
             }
@@ -450,18 +611,21 @@ class InputAccessibilityService : AccessibilityService() {
         walk(root)
 
         if (byLabel != null) return byLabel
+
+        val maxW = if (ir.isEmpty) Int.MAX_VALUE else (ir.width() * 0.5f).toInt().coerceAtLeast(1)
+        val small = clickables.filter { (_, r) -> nearInput(r) && r.width() <= maxW }
+
+        // 2) 文字を入れて新しく押せるようになったもの（同じ名前の部品が前から押せたものは除く）
+        val wasEnabled = before.filter { it.enabled }.map { it.key }.toSet()
+        val appeared = if (before.isEmpty()) emptyList() else small.filter { (n, _) -> spotKey(n) !in wasEnabled }
+        appeared.maxByOrNull { (_, r) -> r.right * 4 + r.bottom }?.let { return it.first }
+
         if (!allowGuess) return null
 
-        // 入力欄の右側で、縦位置が重なっていて、幅が入力欄より明らかに小さいもの
-        val ir = inputRect ?: return null
-        val maxW = (ir.width() * 0.5f).toInt().coerceAtLeast(1)
-        return clickables
-            .filter { (_, r) ->
-                r.centerX() > ir.centerX() &&
-                    r.width() <= maxW &&
-                    r.centerY() in (ir.top - ir.height())..(ir.bottom + ir.height())
-            }
-            .minByOrNull { (_, r) -> r.left }
+        // 3) 入力欄の右側で一番右のもの
+        return small
+            .filter { (_, r) -> ir.isEmpty || r.centerX() > ir.centerX() }
+            .maxByOrNull { (_, r) -> r.right * 4 + r.bottom }
             ?.first
     }
 
@@ -471,41 +635,14 @@ class InputAccessibilityService : AccessibilityService() {
      * これを外すと、別アプリの検索欄に勝手に入る事故に戻る。
      */
     private fun recoverLastInput(): AccessibilityNodeInfo? {
-        val pkg = currentPackage() ?: return null
+        val root = findAppRoot() ?: return null
+        val pkg = root.packageName?.toString() ?: return null
         if (!pkg.equals(lastFocusedPackage ?: "", ignoreCase = true)) return null
         val bounds = lastFocusedBounds ?: return null
-        val root = rootInActiveWindow ?: return null
         val n = searchByBounds(root, bounds) ?: searchInput(root) ?: return null
         n.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         Log.d(TAG, "recovered last input in $pkg")
         return n
-    }
-
-    private fun findFocusedNode(): AccessibilityNodeInfo? {
-        val root = rootInActiveWindow ?: return null
-        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            ?: root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
-        // focused が入力欄っぽくない場合は無効（android.view.View で actions がペースト非対応等）
-        if (focused != null && !looksLikeInput(focused)) return null
-        return focused
-    }
-
-    private fun findInputNodeInTree(): AccessibilityNodeInfo? {
-        rootInActiveWindow?.let { searchInput(it)?.let { n -> return n } }
-        val windowList = try { windows } catch (_: Exception) { null } ?: return null
-        for (w in windowList) {
-            if (w.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
-            val root = w.root ?: continue
-            searchInput(root)?.let { return it }
-        }
-        return null
-    }
-
-    /** 画面全走査でも見つからない場合、前回記憶した bounds 近辺で再探索 */
-    private fun findByLastBounds(): AccessibilityNodeInfo? {
-        val bounds = lastFocusedBounds ?: return null
-        val root = rootInActiveWindow ?: return null
-        return searchByBounds(root, bounds)
     }
 
     private fun looksLikeInput(node: AccessibilityNodeInfo): Boolean {
@@ -517,7 +654,6 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     private fun searchInput(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isFocused && looksLikeInput(node)) return node
         if (looksLikeInput(node)) return node
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
