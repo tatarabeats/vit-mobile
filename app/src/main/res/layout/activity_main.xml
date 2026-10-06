@@ -146,14 +146,22 @@
 
             <TextView
                 style="@style/Vit.Label"
-                android:text="ショートカット（言った言葉を置き換える）" />
+                android:text="置き換え" />
 
-            <EditText
-                android:id="@+id/snippetsInput"
-                style="@style/Vit.Field"
-                android:minHeight="80dp"
-                android:gravity="top|start"
-                android:inputType="textMultiLine" />
+            <TextView
+                style="@style/Vit.Note"
+                android:text="左の言葉だけを喋ると、右の文字が入ります（例: 「メアド」→ メールアドレス）。文の途中で言った時は置き換えません" />
+
+            <LinearLayout
+                android:id="@+id/snippetsBox"
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <Button
+                android:id="@+id/btnAddSnippet"
+                style="@style/Vit.Button"
+                android:text="＋ 追加" />
 
             <TextView
                 style="@style/Vit.Note"

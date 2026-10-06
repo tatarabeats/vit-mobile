@@ -40,8 +40,8 @@ class MainActivity : AppCompatActivity() {
         b.anthropicKeyInput.onEdited { Prefs.setAnthropicKey(this, it.trim()) }
         b.dictionaryInput.setText(Prefs.getDictionary(this))
         b.dictionaryInput.onEdited { Prefs.setDictionary(this, it) }
-        b.snippetsInput.setText(Prefs.getSnippets(this))
-        b.snippetsInput.onEdited { Prefs.setSnippets(this, it) }
+        loadSnippets()
+        b.btnAddSnippet.setOnClickListener { addSnippetRow("", "", focus = true) }
 
         b.llmFixSwitch.isChecked = Prefs.isLlmFixEnabled(this)
         b.llmFixSwitch.setOnCheckedChangeListener { _, checked -> Prefs.setLlmFixEnabled(this, checked) }
@@ -369,6 +369,78 @@ class MainActivity : AppCompatActivity() {
             dlg.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(GOLD)
         }
         dlg.show()
+    }
+
+    // ==================== 置き換え ====================
+    // 保存形式は従来どおり「言う言葉|入る文字」を1行に1つ（Prefs.applySnippets が読む）
+
+    private fun loadSnippets() {
+        b.snippetsBox.removeAllViews()
+        for (line in Prefs.getSnippets(this).lines()) {
+            val parts = line.split("|", limit = 2)
+            if (parts.size == 2 && (parts[0].isNotBlank() || parts[1].isNotBlank())) {
+                addSnippetRow(parts[0].trim(), parts[1].trim(), focus = false)
+            }
+        }
+    }
+
+    private fun saveSnippets() {
+        val lines = mutableListOf<String>()
+        for (i in 0 until b.snippetsBox.childCount) {
+            val row = b.snippetsBox.getChildAt(i) as? android.widget.LinearLayout ?: continue
+            val key = (row.getChildAt(0) as EditText).text.toString().replace("|", "").replace("\n", " ").trim()
+            val value = (row.getChildAt(2) as EditText).text.toString().replace("\n", " ").trim()
+            if (key.isNotEmpty() && value.isNotEmpty()) lines.add("$key|$value")
+        }
+        Prefs.setSnippets(this, lines.joinToString("\n"))
+    }
+
+    private fun addSnippetRow(key: String, value: String, focus: Boolean) {
+        val d = resources.displayMetrics.density
+        fun field(text: String, hint: String, weight: Float) = EditText(this).apply {
+            setText(text)
+            this.hint = hint
+            setSingleLine()
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            setHintTextColor(0x66FFFFFF)
+            setBackgroundResource(R.drawable.field_bg)
+            val pad = (d * 10).toInt()
+            setPadding(pad, pad, pad, pad)
+            layoutParams = android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, weight)
+            onEdited { saveSnippets() }
+        }
+        val row = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (d * 8).toInt() }
+        }
+        val k = field(key, "言う言葉", 1f)
+        row.addView(k)
+        row.addView(android.widget.TextView(this).apply {
+            text = "→"
+            setTextColor(GOLD)
+            textSize = 16f
+            val pad = (d * 6).toInt()
+            setPadding(pad, 0, pad, 0)
+        })
+        row.addView(field(value, "入る文字", 1.6f))
+        row.addView(android.widget.TextView(this).apply {
+            text = "✕"
+            setTextColor(0x99FFFFFF.toInt())
+            textSize = 16f
+            val pad = (d * 10).toInt()
+            setPadding(pad, pad, (d * 2).toInt(), pad)
+            contentDescription = "この行を消す"
+            setOnClickListener {
+                b.snippetsBox.removeView(row)
+                saveSnippets()
+            }
+        })
+        b.snippetsBox.addView(row)
+        if (focus) k.requestFocus()
     }
 
     // ==================== その他 ====================
