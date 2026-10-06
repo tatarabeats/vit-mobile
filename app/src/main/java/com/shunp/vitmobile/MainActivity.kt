@@ -60,6 +60,9 @@ class MainActivity : AppCompatActivity() {
                 Prefs.setExcludedPackages(this, it); showAppLists()
             }
         }
+        // 並んだアイコン（とその余白）をタップしても選択画面を開く。長押しでアプリ名
+        b.autoEnterApps.tag = Runnable { b.pickAutoEnter.performClick() }
+        b.excludedApps.tag = Runnable { b.pickExcluded.performClick() }
         b.autoEnterApps.setOnClickListener { b.pickAutoEnter.performClick() }
         b.excludedApps.setOnClickListener { b.pickExcluded.performClick() }
 
@@ -196,12 +199,57 @@ class MainActivity : AppCompatActivity() {
         packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
     } catch (_: Exception) { pkg }
 
-    /** パッケージ名ではなくアプリ名で見せる */
+    /** 選んだアプリをアイコンで並べる（一目で分かるように・駿平 2026-10-06） */
     private fun showAppLists() {
-        fun render(list: List<String>): String =
-            if (list.isEmpty()) "（なし）" else list.map { appLabel(it) }.sortedBy { it.lowercase() }.joinToString("、")
-        b.autoEnterApps.text = render(parseList(Prefs.getAutoEnterPackages(this)))
-        b.excludedApps.text = render(parseList(Prefs.getExcludedPackages(this)))
+        renderIcons(b.autoEnterApps, parseList(Prefs.getAutoEnterPackages(this)))
+        renderIcons(b.excludedApps, parseList(Prefs.getExcludedPackages(this)))
+    }
+
+    private fun renderIcons(grid: android.widget.GridLayout, pkgs: List<String>) {
+        grid.removeAllViews()
+        val d = resources.displayMetrics.density
+        val cell = (d * 52).toInt()
+        // 画面幅から1行に並ぶ数を決める（外側の余白: 画面18dp×2・カード16dp×2・枠8dp×2）
+        val usable = resources.displayMetrics.widthPixels - (d * (36 + 32 + 16)).toInt()
+        grid.columnCount = (usable / cell).coerceAtLeast(1)
+        if (pkgs.isEmpty()) {
+            grid.addView(android.widget.TextView(this).apply {
+                text = "（なし）　タップして選ぶ"
+                setTextColor(0x99FFFFFF.toInt())
+                textSize = 13f
+                setPadding((d * 6).toInt(), (d * 12).toInt(), 0, 0)
+            })
+            return
+        }
+        val items = pkgs.map { it to appLabel(it) }.sortedBy { it.second.lowercase() }
+        for ((pkg, label) in items) {
+            val icon = try { packageManager.getApplicationIcon(pkg) } catch (_: Exception) { null }
+            val v: View = if (icon != null) {
+                android.widget.ImageView(this).apply {
+                    setImageDrawable(icon)
+                    contentDescription = label
+                    val pad = (d * 6).toInt()
+                    setPadding(pad, pad, pad, pad)
+                }
+            } else {
+                // 入っていないアプリは名前の頭文字で
+                android.widget.TextView(this).apply {
+                    text = label.take(2)
+                    gravity = android.view.Gravity.CENTER
+                    setTextColor(Color.WHITE)
+                    textSize = 11f
+                }
+            }
+            v.setOnLongClickListener {
+                Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+                true
+            }
+            v.setOnClickListener { (grid.tag as? Runnable)?.run() }
+            grid.addView(v, android.widget.GridLayout.LayoutParams().apply {
+                width = cell
+                height = cell
+            })
+        }
     }
 
     /**

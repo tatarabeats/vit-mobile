@@ -83,10 +83,14 @@
                 style="@style/Vit.Note"
                 android:text="入力したあと送信ボタンまで押すアプリ。入力欄を選んでいなくても入れます" />
 
-            <TextView
+            <GridLayout
                 android:id="@+id/autoEnterApps"
-                style="@style/Vit.Field"
-                android:minHeight="44dp" />
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/field_bg"
+                android:padding="8dp"
+                android:minHeight="56dp" />
 
             <Button
                 android:id="@+id/pickAutoEnter"
@@ -105,10 +109,14 @@
                 style="@style/Vit.Note"
                 android:text="録音の操作に反応しないアプリ（入力欄を選んでいる時は使えます）" />
 
-            <TextView
+            <GridLayout
                 android:id="@+id/excludedApps"
-                style="@style/Vit.Field"
-                android:minHeight="44dp" />
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/field_bg"
+                android:padding="8dp"
+                android:minHeight="56dp" />
 
             <Button
                 android:id="@+id/pickExcluded"
