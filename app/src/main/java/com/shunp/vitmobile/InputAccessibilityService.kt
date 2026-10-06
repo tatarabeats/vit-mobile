@@ -290,7 +290,6 @@ class InputAccessibilityService : AccessibilityService() {
         val nowPkg = currentPackage()
         if (expectPkg != null && nowPkg != null && !nowPkg.equals(expectPkg, ignoreCase = true)) {
             diag("insert: abort, app changed $expectPkg -> $nowPkg")
-            toastMain("アプリが切り替わったので入れなかった（履歴に残っています）")
             return
         }
         val node = try { findTargetInput() } catch (_: Exception) { null }
@@ -300,7 +299,6 @@ class InputAccessibilityService : AccessibilityService() {
                 return
             }
             diag("insert: no input found pkg=${currentPackage()}")
-            toastMain("入力欄が見つからなかった（履歴に残っています）")
             return
         }
         Log.d(TAG, "node class=${node.className} pkg=${node.packageName} focused=${node.isFocused} editable=${node.isEditable}")
@@ -320,7 +318,6 @@ class InputAccessibilityService : AccessibilityService() {
                     maybeSendEnter(node, text, before)
                 } else {
                     diag("insert: failed after set_text pkg=$pkg")
-                    toastMain("入力できなかった（履歴に残っています）")
                 }
             }, 120)
             return
@@ -334,7 +331,6 @@ class InputAccessibilityService : AccessibilityService() {
             return
         }
         diag("insert: failed on ${node.className} pkg=$pkg")
-        toastMain("入力できなかった（履歴に残っています）")
     }
 
     /** 入力欄の今の中身。何も無い時にヒント文（「メッセージ」等）を返すアプリがあるので除く */
@@ -364,12 +360,6 @@ class InputAccessibilityService : AccessibilityService() {
         val alive = try { node.refresh() } catch (_: Exception) { false }
         if (alive) return node
         return findFocusedInput() ?: node
-    }
-
-    private fun toastMain(msg: String) {
-        handler.post {
-            try { android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show() } catch (_: Exception) {}
-        }
     }
 
     /** クリップボードに一時的に置いて ACTION_PASTE で貼る。終わったら元に戻す */

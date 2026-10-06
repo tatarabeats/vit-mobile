@@ -2,374 +2,223 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FF0A0E1A">
+    android:background="#FF0A0E1A"
+    android:fillViewport="true">
 
     <LinearLayout
         android:orientation="vertical"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="24dp">
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="22dp"
+        android:paddingBottom="28dp">
 
+        <!-- 見出しと状態 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/app_name"
-            android:textSize="28sp"
+            android:textSize="26sp"
             android:textStyle="bold"
-            android:textColor="#FFF0C040"
-            android:paddingBottom="18dp" />
-
-        <!-- よく触るものを上に置く -->
-        <Button
-            android:id="@+id/btnHistory"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="履歴"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/autoEnterSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="4dp"
-            android:text="自動送信"
-            android:textColor="#FFFFFFFF"
-            android:textSize="16sp" />
-
-        <Button
-            android:id="@+id/btnStartOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="起動"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FF4ECB8B" />
-
-        <Button
-            android:id="@+id/btnStopOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="停止"
-            android:textColor="#FFFFFFFF"
-            android:backgroundTint="#FF1A2440" />
-
-        <Button
-            android:id="@+id/btnUpdate"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="更新を確認"
-            android:textColor="#FFFFFFFF"
-            android:backgroundTint="#FF2B3A5C" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="14dp"
-            android:background="#33F0C040" />
+            android:textColor="#FFF0C040" />
 
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="自動送信"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
-            android:paddingBottom="6dp" />
+            android:id="@+id/statusText"
+            style="@style/Vit.Note"
+            android:textSize="14sp" />
 
-        <EditText
-            android:id="@+id/autoEnterInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="70dp"
-            android:gravity="top|start"
-            android:inputType="textMultiLine"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#80FFFFFF"
-            android:background="#FF1A2440"
-            android:padding="12dp"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/pickAutoEnter"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="アプリを選ぶ"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <Button
-            android:id="@+id/btnAutoSendDiag"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="診断"
-            android:textColor="#FFFFFFFF"
-            android:backgroundTint="#FF1A2440" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="除外アプリ"
-            android:textStyle="bold"
-            android:textSize="16sp"
-            android:textColor="#FFFFFFFF"
-            android:paddingTop="20dp"
-            android:paddingBottom="6dp" />
-
-        <EditText
-            android:id="@+id/excludedInput"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="70dp"
-            android:gravity="top|start"
-            android:inputType="textMultiLine"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#80FFFFFF"
-            android:background="#FF1A2440"
-            android:padding="12dp"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/saveExcluded"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="保存"
-            android:textColor="#FF0A0E1A"
-            android:backgroundTint="#FFF0C040" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="14dp"
-            android:background="#33F0C040" />
-
-        <!-- ここから下は初回だけ触るもの。既定では畳んでおく -->
-        <Button
-            android:id="@+id/btnToggleAdvanced"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="設定を開く"
-            android:textColor="#FFFFFFFF"
-            android:backgroundTint="#FF1A2440" />
-
+        <!-- 準備が足りない時だけ出す -->
         <LinearLayout
-            android:id="@+id/advancedBox"
-            android:orientation="vertical"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:id="@+id/setupCard"
+            style="@style/Vit.Card"
+            android:background="@drawable/warn_bg"
             android:visibility="gone">
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="権限"
-                android:textStyle="bold"
-                android:textSize="16sp"
-                android:textColor="#FFFFFFFF"
-                android:paddingTop="18dp"
-                android:paddingBottom="6dp" />
+                style="@style/Vit.CardTitle"
+                android:textColor="#FFFF9A60"
+                android:text="使う前に必要な設定" />
 
             <Button
                 android:id="@+id/btnOverlayPerm"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="他のアプリの上に表示"
-                android:textColor="#FFFFFFFF"
-                android:backgroundTint="#FF1A2440" />
+                style="@style/Vit.Button"
+                android:text="他のアプリの上に表示を許可" />
 
             <Button
                 android:id="@+id/btnAccessibilityPerm"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="ユーザー補助"
-                android:textColor="#FFFFFFFF"
-                android:backgroundTint="#FF1A2440" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Groq APIキー"
-                android:textStyle="bold"
-                android:textSize="16sp"
-                android:textColor="#FFFFFFFF"
-                android:paddingTop="20dp"
-                android:paddingBottom="6dp" />
-
-            <EditText
-                android:id="@+id/apiKeyInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="gsk_..."
-                android:inputType="textPassword"
-                android:textColor="#FFFFFFFF"
-                android:textColorHint="#80FFFFFF"
-                android:background="#FF1A2440"
-                android:padding="12dp"
-                android:autofillHints="password" />
+                style="@style/Vit.Button"
+                android:text="ユーザー補助をON" />
 
             <Button
-                android:id="@+id/saveApiKey"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="保存"
-                android:textColor="#FF0A0E1A"
-                android:backgroundTint="#FFF0C040" />
+                android:id="@+id/btnMicPerm"
+                style="@style/Vit.Button"
+                android:text="マイクを許可" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Anthropic APIキー"
-                android:textStyle="bold"
-                android:textSize="16sp"
-                android:textColor="#FFFFFFFF"
-                android:paddingTop="20dp"
-                android:paddingBottom="6dp" />
+                android:id="@+id/needKeyText"
+                style="@style/Vit.Note"
+                android:layout_marginTop="10dp"
+                android:text="下の「詳細設定」で Groq APIキーを入れてください" />
+        </LinearLayout>
 
-            <EditText
-                android:id="@+id/anthropicKeyInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="sk-ant-..."
-                android:inputType="textPassword"
-                android:textColor="#FFFFFFFF"
-                android:textColorHint="#80FFFFFF"
-                android:background="#FF1A2440"
-                android:padding="12dp"
-                android:autofillHints="password" />
+        <Button
+            android:id="@+id/btnHistory"
+            style="@style/Vit.Button.Primary"
+            android:layout_marginTop="16dp"
+            android:minHeight="56dp"
+            android:textSize="16sp"
+            android:text="履歴" />
+
+        <!-- 自動送信 -->
+        <LinearLayout style="@style/Vit.Card">
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/autoEnterSwitch"
+                style="@style/Vit.Switch"
+                android:textStyle="bold"
+                android:text="自動送信" />
+
+            <TextView
+                style="@style/Vit.Note"
+                android:text="入力したあと送信ボタンまで押すアプリ。入力欄を選んでいなくても入れます" />
+
+            <TextView
+                android:id="@+id/autoEnterApps"
+                style="@style/Vit.Field"
+                android:minHeight="44dp" />
 
             <Button
-                android:id="@+id/saveAnthropicKey"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="保存"
-                android:textColor="#FF0A0E1A"
-                android:backgroundTint="#FFF0C040" />
+                android:id="@+id/pickAutoEnter"
+                style="@style/Vit.Button"
+                android:text="アプリを選ぶ" />
+        </LinearLayout>
+
+        <!-- 除外アプリ -->
+        <LinearLayout style="@style/Vit.Card">
+
+            <TextView
+                style="@style/Vit.CardTitle"
+                android:text="除外アプリ" />
+
+            <TextView
+                style="@style/Vit.Note"
+                android:text="録音の操作に反応しないアプリ（入力欄を選んでいる時は使えます）" />
+
+            <TextView
+                android:id="@+id/excludedApps"
+                style="@style/Vit.Field"
+                android:minHeight="44dp" />
+
+            <Button
+                android:id="@+id/pickExcluded"
+                style="@style/Vit.Button"
+                android:text="アプリを選ぶ" />
+        </LinearLayout>
+
+        <!-- 文字の整え -->
+        <LinearLayout style="@style/Vit.Card">
 
             <androidx.appcompat.widget.SwitchCompat
                 android:id="@+id/llmFixSwitch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="文章を整える"
-                android:textColor="#FFFFFFFF"
-                android:textSize="15sp" />
+                style="@style/Vit.Switch"
+                android:textStyle="bold"
+                android:text="文章を整える" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="辞書"
-                android:textStyle="bold"
-                android:textSize="16sp"
-                android:textColor="#FFFFFFFF"
-                android:paddingTop="20dp"
-                android:paddingBottom="6dp" />
+                style="@style/Vit.Label"
+                android:text="辞書（よく間違う言葉。1行に1つ）" />
 
             <EditText
                 android:id="@+id/dictionaryInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="90dp"
+                style="@style/Vit.Field"
+                android:minHeight="80dp"
                 android:gravity="top|start"
-                android:inputType="textMultiLine"
-                android:textColor="#FFFFFFFF"
-                android:textColorHint="#80FFFFFF"
-                android:background="#FF1A2440"
-                android:padding="12dp"
-                android:textSize="13sp" />
-
-            <Button
-                android:id="@+id/saveDictionary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="保存"
-                android:textColor="#FF0A0E1A"
-                android:backgroundTint="#FFF0C040" />
+                android:inputType="textMultiLine" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="ショートカット"
-                android:textStyle="bold"
-                android:textSize="16sp"
-                android:textColor="#FFFFFFFF"
-                android:paddingTop="20dp"
-                android:paddingBottom="6dp" />
+                style="@style/Vit.Label"
+                android:text="ショートカット（言った言葉を置き換える）" />
 
             <EditText
                 android:id="@+id/snippetsInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                style="@style/Vit.Field"
                 android:minHeight="80dp"
                 android:gravity="top|start"
-                android:hint="住所|和歌山県〇〇市〇〇町1-2-3"
-                android:inputType="textMultiLine"
-                android:textColor="#FFFFFFFF"
-                android:textColorHint="#80FFFFFF"
-                android:background="#FF1A2440"
-                android:padding="12dp"
-                android:textSize="13sp" />
-
-            <Button
-                android:id="@+id/saveSnippets"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="保存"
-                android:textColor="#FF0A0E1A"
-                android:backgroundTint="#FFF0C040" />
+                android:inputType="textMultiLine" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="GitHubトークン"
-                android:textStyle="bold"
-                android:textSize="16sp"
-                android:textColor="#FFFFFFFF"
-                android:paddingTop="20dp"
-                android:paddingBottom="6dp" />
+                style="@style/Vit.Note"
+                android:text="書いた内容はその場で保存されます" />
+        </LinearLayout>
+
+        <!-- 詳細設定（ふだん触らないもの） -->
+        <Button
+            android:id="@+id/btnToggleAdvanced"
+            style="@style/Vit.Button"
+            android:layout_marginTop="18dp"
+            android:text="詳細設定を開く" />
+
+        <LinearLayout
+            android:id="@+id/advancedBox"
+            style="@style/Vit.Card"
+            android:visibility="gone">
+
+            <TextView
+                style="@style/Vit.CardTitle"
+                android:text="APIキー" />
+
+            <TextView
+                style="@style/Vit.Label"
+                android:layout_marginTop="8dp"
+                android:text="Groq（文字起こし・必須）" />
 
             <EditText
-                android:id="@+id/githubTokenInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="github_pat_..."
+                android:id="@+id/apiKeyInput"
+                style="@style/Vit.Field"
                 android:inputType="textPassword"
-                android:textColor="#FFFFFFFF"
-                android:textColorHint="#80FFFFFF"
-                android:background="#FF1A2440"
-                android:padding="12dp"
-                android:autofillHints="password" />
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/Vit.Label"
+                android:text="Anthropic（文章を整える・任意）" />
+
+            <EditText
+                android:id="@+id/anthropicKeyInput"
+                style="@style/Vit.Field"
+                android:inputType="textPassword"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/Vit.CardTitle"
+                android:layout_marginTop="22dp"
+                android:text="困った時" />
 
             <Button
-                android:id="@+id/saveGithubToken"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="保存"
-                android:textColor="#FF0A0E1A"
-                android:backgroundTint="#FFF0C040" />
+                android:id="@+id/btnAutoSendDiag"
+                style="@style/Vit.Button"
+                android:text="自動送信の記録を見る" />
 
             <Button
-                android:id="@+id/btnSendFeedback"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:layout_marginBottom="24dp"
-                android:text="フィードバックを送る"
-                android:textColor="#FFFFFFFF"
-                android:backgroundTint="#FF1A2440" />
+                android:id="@+id/btnOpenAccessibility"
+                style="@style/Vit.Button"
+                android:text="ユーザー補助の設定を開く" />
+
+            <Button
+                android:id="@+id/btnRestart"
+                style="@style/Vit.Button"
+                android:text="VIT を再起動" />
+
+            <Button
+                android:id="@+id/btnStopOverlay"
+                style="@style/Vit.Button"
+                android:text="VIT を止める" />
         </LinearLayout>
+
+        <Button
+            android:id="@+id/btnUpdate"
+            style="@style/Vit.Button"
+            android:layout_marginTop="18dp"
+            android:text="更新を確認" />
     </LinearLayout>
 </ScrollView>
