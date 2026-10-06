@@ -277,7 +277,7 @@ class InputAccessibilityService : AccessibilityService() {
             Log.d(TAG, "no text to paste")
             return
         }
-        insertWithRetry(text, direct = providedText != null, attempt = 0)
+        insertWithRetry(text, direct = providedText != null, attempt = 0, expectPkg = currentPackage())
     }
 
     /**
@@ -285,11 +285,18 @@ class InputAccessibilityService : AccessibilityService() {
      * 録音を止めた直後は窓の切り替えが落ち着いておらず、短い発話ほど書き起こしが速く返るので
      * 「まだ VIT の窓が前面」の瞬間に当たりやすかった（短いと入らない、の原因）。
      */
-    private fun insertWithRetry(text: String, direct: Boolean, attempt: Int) {
+    private fun insertWithRetry(text: String, direct: Boolean, attempt: Int, expectPkg: String?) {
+        // 待っている間に別のアプリへ移ったら入れない（喋った時のアプリにだけ入れる）
+        val nowPkg = currentPackage()
+        if (expectPkg != null && nowPkg != null && !nowPkg.equals(expectPkg, ignoreCase = true)) {
+            diag("insert: abort, app changed $expectPkg -> $nowPkg")
+            toastMain("アプリが切り替わったので入れなかった（履歴に残っています）")
+            return
+        }
         val node = try { findTargetInput() } catch (_: Exception) { null }
         if (node == null) {
             if (attempt < 6) {
-                handler.postDelayed({ insertWithRetry(text, direct, attempt + 1) }, 150)
+                handler.postDelayed({ insertWithRetry(text, direct, attempt + 1, expectPkg ?: nowPkg) }, 150)
                 return
             }
             diag("insert: no input found pkg=${currentPackage()}")
@@ -352,11 +359,11 @@ class InputAccessibilityService : AccessibilityService() {
         return now != existing && now.contains(probe)
     }
 
+    /** 挿入した入力欄そのものを読み直す。画面が作り直されて消えていた時だけ、今の入力欄で代用する */
     private fun refreshed(node: AccessibilityNodeInfo): AccessibilityNodeInfo {
-        val f = findFocusedInput()
-        if (f != null) return f
-        try { node.refresh() } catch (_: Exception) {}
-        return node
+        val alive = try { node.refresh() } catch (_: Exception) { false }
+        if (alive) return node
+        return findFocusedInput() ?: node
     }
 
     private fun toastMain(msg: String) {
@@ -443,6 +450,7 @@ class InputAccessibilityService : AccessibilityService() {
         val session = ++autoEnterSession
         val delays = listOf(150L, 450L, 850L, 1400L, 2100L, 3000L, 3800L)
         var acted = false
+        var pressedKey: String? = null
         for ((i, d) in delays.withIndex()) {
             handler.postDelayed({
                 if (session != autoEnterSession) return@postDelayed
@@ -463,8 +471,15 @@ class InputAccessibilityService : AccessibilityService() {
                     diag("attempt=$i gave up pkg=$pkg")
                     return@postDelayed
                 }
-                // 一度押しても文字が残っている＝クリックを受け付けたふりのアプリ。次は指と同じタップで押す
-                if (trySend(node, before, i, last = i == delays.lastIndex - 1, preferTap = acted)) acted = true
+                if (acted) {
+                    // 一度押しても文字が残っている＝クリックを受け付けたふりのアプリ。
+                    // 同じボタンだけを指と同じタップで押し直す。別のボタン（送信後に出る「停止」等）は選ばない
+                    val key = pressedKey ?: return@postDelayed
+                    retapSame(key, i)
+                    return@postDelayed
+                }
+                val key = trySend(node, before, i, last = i == delays.lastIndex - 1)
+                if (key != null) { acted = true; pressedKey = key.ifEmpty { null } }
             }, d)
         }
     }
@@ -477,13 +492,52 @@ class InputAccessibilityService : AccessibilityService() {
         return n.text?.toString()?.contains(probe) == true
     }
 
+    /** 押したボタンと同じ名前のボタンを探してタップし直す */
+    private fun retapSame(key: String, attempt: Int) {
+        val root = findAppRoot() ?: return
+        var hit: AccessibilityNodeInfo? = null
+        fun walk(n: AccessibilityNodeInfo?) {
+            if (n == null || hit != null) return
+            if (n.isClickable && n.isEnabled && n.isVisibleToUser && spotKey(n) == key && !hasBadLabel(n)) {
+                hit = n
+                return
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i))
+        }
+        walk(root)
+        val b = hit
+        if (b == null) {
+            diag("attempt=$attempt retap: same button gone")
+            return
+        }
+        val r = Rect()
+        b.getBoundsInScreen(r)
+        val ok = tapAt(r.exactCenterX(), r.exactCenterY())
+        diag("attempt=$attempt retap same button tap=$ok rect=$r")
+    }
+
+    /** 本人か子孫（3段まで）に「停止」「音声」などの語があるか */
+    private fun hasBadLabel(n: AccessibilityNodeInfo, depth: Int = 0): Boolean {
+        val label = ((n.contentDescription?.toString() ?: "") + " " + (n.text?.toString() ?: "") + " " +
+            (n.viewIdResourceName?.substringAfterLast('/') ?: "")).lowercase()
+        if (notSendWords.any { label.contains(it) }) return true
+        if (depth >= 3) return false
+        for (i in 0 until n.childCount) {
+            val c = n.getChild(i) ?: continue
+            if (hasBadLabel(c, depth + 1)) return true
+        }
+        return false
+    }
+
+    /**
+     * 送信を1回試す。押したらそのボタンの名前（IME_ENTER の時は空文字）、押さなかったら null
+     */
     private fun trySend(
         fallback: AccessibilityNodeInfo,
         before: List<Spot>,
         attempt: Int,
-        last: Boolean,
-        preferTap: Boolean
-    ): Boolean {
+        last: Boolean
+    ): String? {
         val root = findAppRoot()
         val focus = findFocusedInput() ?: fallback
 
@@ -493,7 +547,7 @@ class InputAccessibilityService : AccessibilityService() {
         val btn = findSendButton(root, focus, before, allowGuess = last)
         if (btn == null) {
             diag("attempt=$attempt send button not found")
-            if (!last) return false
+            if (!last) return null
             dumpCandidates(root)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 try {
@@ -502,26 +556,26 @@ class InputAccessibilityService : AccessibilityService() {
                         )
                     ) {
                         diag("attempt=$attempt fallback ime_enter")
-                        return true
+                        return ""
                     }
                 } catch (_: Exception) {}
             }
-            return false
+            return null
         }
         val r = Rect()
         btn.getBoundsInScreen(r)
 
         // 2) ノードのクリック
-        if (!preferTap && btn.isEnabled && btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+        if (btn.isEnabled && btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
             diag("attempt=$attempt node click ok rect=$r desc=${btn.contentDescription}")
-            return true
+            return spotKey(btn)
         }
 
         // 3) 実際に指で触るのと同じタップ。
         //    Compose 製アプリは ACTION_CLICK を無視することがあるので、こちらが最後の手段
         val ok = tapAt(r.exactCenterX(), r.exactCenterY())
         diag("attempt=$attempt gesture tap=$ok rect=$r enabled=${btn.isEnabled}")
-        return ok
+        return if (ok) spotKey(btn) else null
     }
 
     private fun tapAt(x: Float, y: Float): Boolean {
@@ -631,14 +685,14 @@ class InputAccessibilityService : AccessibilityService() {
                 val tr0 = Rect()
                 t?.getBoundsInScreen(tr0)
                 // 入力欄ごと包む大きな枠まで親をたどった場合は採らない
-                if (t != null && !t.isEditable && (ir.isEmpty || tr0.width() <= ir.width() * 0.6f)) {
+                if (t != null && !t.isEditable && !hasBadLabel(t) && (ir.isEmpty || tr0.width() <= ir.width() * 0.6f)) {
                     val tr = Rect()
                     t.getBoundsInScreen(tr)
                     if (nearInput(tr) && tr.centerY() > byLabelY) { byLabelY = tr.centerY(); byLabel = t }
                 }
             }
             if (n.isClickable && n.isEnabled && n.isVisibleToUser && !n.isEditable &&
-                r.width() > 0 && r.height() > 0 && !bad
+                r.width() > 0 && r.height() > 0 && !bad && !hasBadLabel(n)
             ) {
                 clickables.add(n to Rect(r))
             }
@@ -696,6 +750,8 @@ class InputAccessibilityService : AccessibilityService() {
         val limit = 300
         var best: AccessibilityNodeInfo? = null
         var bestD = Int.MAX_VALUE
+        var sameKind = 0
+        var only: AccessibilityNodeInfo? = null
         fun walk(n: AccessibilityNodeInfo?) {
             if (n == null) return
             if (n.isVisibleToUser && looksLikeInput(n) &&
@@ -705,11 +761,14 @@ class InputAccessibilityService : AccessibilityService() {
                 n.getBoundsInScreen(r)
                 val d = kotlin.math.abs(r.centerX() - target.centerX()) + kotlin.math.abs(r.centerY() - target.centerY())
                 if (d <= limit && d < bestD) { bestD = d; best = n }
+                sameKind++
+                only = n
             }
             for (i in 0 until n.childCount) walk(n.getChild(i))
         }
         walk(root)
-        return best
+        // キーボードの出入りで大きく動いても、同じ種類の欄が画面に1つしか無ければ取り違えようがない
+        return best ?: if (sameKind == 1) only else null
     }
 
     private fun searchByBounds(node: AccessibilityNodeInfo, target: Rect): AccessibilityNodeInfo? {
