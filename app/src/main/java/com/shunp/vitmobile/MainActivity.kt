@@ -212,7 +212,13 @@ class MainActivity : AppCompatActivity() {
         // 画面幅から1行に並ぶ数を決める（外側の余白: 画面18dp×2・カード16dp×2・枠8dp×2）
         val usable = resources.displayMetrics.widthPixels - (d * (36 + 32 + 16)).toInt()
         grid.columnCount = (usable / cell).coerceAtLeast(1)
-        if (pkgs.isEmpty()) {
+        // スマホに入っていないアプリ（最初から一覧に入れてある Gemini 等）は出さない。
+        // 一覧からは消さないので、後で入れればそのまま効く
+        val items = pkgs.mapNotNull { pkg ->
+            val icon = try { packageManager.getApplicationIcon(pkg) } catch (_: Exception) { null }
+            icon?.let { Triple(pkg, appLabel(pkg), it) }
+        }.sortedBy { it.second.lowercase() }
+        if (items.isEmpty()) {
             grid.addView(android.widget.TextView(this).apply {
                 text = "（なし）　タップして選ぶ"
                 setTextColor(0x99FFFFFF.toInt())
@@ -221,24 +227,12 @@ class MainActivity : AppCompatActivity() {
             })
             return
         }
-        val items = pkgs.map { it to appLabel(it) }.sortedBy { it.second.lowercase() }
-        for ((pkg, label) in items) {
-            val icon = try { packageManager.getApplicationIcon(pkg) } catch (_: Exception) { null }
-            val v: View = if (icon != null) {
-                android.widget.ImageView(this).apply {
-                    setImageDrawable(icon)
-                    contentDescription = label
-                    val pad = (d * 6).toInt()
-                    setPadding(pad, pad, pad, pad)
-                }
-            } else {
-                // 入っていないアプリは名前の頭文字で
-                android.widget.TextView(this).apply {
-                    text = label.take(2)
-                    gravity = android.view.Gravity.CENTER
-                    setTextColor(Color.WHITE)
-                    textSize = 11f
-                }
+        for ((_, label, icon) in items) {
+            val v = android.widget.ImageView(this).apply {
+                setImageDrawable(icon)
+                contentDescription = label
+                val pad = (d * 6).toInt()
+                setPadding(pad, pad, pad, pad)
             }
             v.setOnLongClickListener {
                 Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
