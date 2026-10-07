@@ -17,4 +17,8 @@
     <color name="mic_bg_recording">#EEF0C040</color>
     <color name="mic_border">#FFF0C040</color>
     <color name="mic_border_recording">#FF0A0E1A</color>
+    <!-- テーマの文字色は色の部品として渡す（直接 #色 を書くと BottomNavigationView が落ちる・2026-10-07） -->
+    <color name="vit_text_primary">#FFFFFFFF</color>
+    <color name="vit_text_secondary">#B3FFFFFF</color>
+    <color name="vit_text_hint">#99FFFFFF</color>
 </resources>

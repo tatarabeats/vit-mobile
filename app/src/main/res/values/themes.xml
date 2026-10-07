@@ -6,9 +6,9 @@
         <item name="colorAccent">@color/gold</item>
         <item name="android:colorBackground">#FF0A0E1A</item>
         <item name="android:textColor">#FFFFFFFF</item>
-        <item name="android:textColorPrimary">#FFFFFFFF</item>
-        <item name="android:textColorSecondary">#CCFFFFFF</item>
-        <item name="android:textColorHint">#80FFFFFF</item>
+        <item name="android:textColorPrimary">@color/vit_text_primary</item>
+        <item name="android:textColorSecondary">@color/vit_text_secondary</item>
+        <item name="android:textColorHint">@color/vit_text_hint</item>
     </style>
 
     <!-- ジェスチャーから叩く透明な入口。画面には一切出さない -->
@@ -34,9 +34,9 @@
         <item name="android:navigationBarColor">#131A2E</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:textColorPrimary">#FFFFFF</item>
-        <item name="android:textColorSecondary">#B3FFFFFF</item>
-        <item name="android:textColorHint">#99FFFFFF</item>
+        <item name="android:textColorPrimary">@color/vit_text_primary</item>
+        <item name="android:textColorSecondary">@color/vit_text_secondary</item>
+        <item name="android:textColorHint">@color/vit_text_hint</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.VitMobile.MainDialog</item>
         <item name="materialButtonStyle">@style/Vit.Button</item>
     </style>
@@ -46,9 +46,9 @@
         <item name="colorSurface">#131A2E</item>
         <item name="colorOnSurface">#FFFFFF</item>
         <item name="android:colorBackground">#131A2E</item>
-        <item name="android:textColorPrimary">#FFFFFF</item>
-        <item name="android:textColorSecondary">#B3FFFFFF</item>
-        <item name="android:textColorHint">#99FFFFFF</item>
+        <item name="android:textColorPrimary">@color/vit_text_primary</item>
+        <item name="android:textColorSecondary">@color/vit_text_secondary</item>
+        <item name="android:textColorHint">@color/vit_text_hint</item>
         <item name="materialAlertDialogTitleTextStyle">@style/Vit.CardTitle</item>
         <item name="materialAlertDialogBodyTextStyle">@style/Vit.Label</item>
         <item name="buttonBarPositiveButtonStyle">@style/Vit.DialogButton</item>
