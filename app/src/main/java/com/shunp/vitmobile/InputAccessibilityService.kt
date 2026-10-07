@@ -18,6 +18,7 @@ class InputAccessibilityService : AccessibilityService() {
     companion object {
         const val ACTION_PASTE = "com.shunp.vitmobile.ACTION_PASTE"
         const val EXTRA_TEXT = "text"
+        const val CLAUDE_PACKAGE = "com.anthropic.claude"
         private const val TAG = "VIT_ACC"
         // 最後にフォーカスされた入力欄の情報（fragment 間遷移で失われるのを補償）
         @Volatile
@@ -116,18 +117,28 @@ class InputAccessibilityService : AccessibilityService() {
             registerReceiver(receiver, filter)
         }
         instance = this
+        updateSidebarForeground(currentPackage())
+        OverlayService.refreshClaudeSwipe()
         Log.d(TAG, "service connected")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         try { unregisterReceiver(receiver) } catch (_: Exception) {}
         instance = null
+        OverlayService.refreshClaudeSwipe()
         return super.onUnbind(intent)
     }
 
     /** フォーカスイベントを常時監視して、最後にフォーカスされた入力欄を記憶 */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val e = event ?: return
+        if (e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val window = try { windows.firstOrNull { it.id == e.windowId } } catch (_: Exception) { null }
+            if (window == null || window.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
+                updateSidebarForeground(e.packageName?.toString())
+            }
+            return
+        }
         if (e.eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED
             && e.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             && e.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED
@@ -148,6 +159,93 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {}
+
+    /** サイドバー専用。既存の入力先・録音用 currentPackage() の判定は変えない。 */
+    var sidebarForegroundPackage: String? = null
+        private set
+
+    private fun updateSidebarForeground(pkg: String?) {
+        if (pkg.isNullOrBlank() || pkg == packageName || pkg == "android"
+            || pkg == "com.android.systemui" || pkg.startsWith("com.android.systemui.")
+            || pkg == "com.android.permissioncontroller"
+            || pkg == "com.google.android.permissioncontroller"
+        ) return
+        // windowId が取得できない IME イベントも除外する（キーボード名の固定リストにしない）。
+        val ime = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+        val isIme = try { ime.enabledInputMethodList.any { it.packageName == pkg } } catch (_: Exception) { false }
+        if (isIme) return
+        if (sidebarForegroundPackage == pkg) return
+        sidebarForegroundPackage = pkg
+        OverlayService.refreshClaudeSwipe()
+    }
+
+    /** ラベルのある左上のボタンを優先し、座標タップは最後の手段にする。 */
+    fun openClaudeSidebar() {
+        if (!android.provider.Settings.canDrawOverlays(this)
+            || !Prefs.isClaudeSwipeEnabled(this) || sidebarForegroundPackage != CLAUDE_PACKAGE
+        ) {
+            diag("sidebar: skipped (no permission, disabled or not Claude)")
+            return
+        }
+        try {
+            val root = findAppRoot()
+            if (root == null || root.packageName?.toString() != CLAUDE_PACKAGE) {
+                diag("sidebar: skipped (Claude window unavailable)")
+                return
+            }
+            val dm = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION")
+            getSystemService(android.view.WindowManager::class.java).defaultDisplay.getRealMetrics(dm)
+            val keywords = listOf("sidebar", "menu", "drawer", "navigation", "サイドバー", "メニュー", "チャット一覧", "open")
+            fun inTopLeft(node: AccessibilityNodeInfo): Boolean {
+                val r = Rect()
+                node.getBoundsInScreen(r)
+                return node.isVisibleToUser && node.isEnabled && !r.isEmpty
+                    && r.centerX() >= 0 && r.centerX() < dm.widthPixels / 2
+                    && r.centerY() >= 0 && r.centerY() < dm.heightPixels * 0.2f
+            }
+            fun findButton(node: AccessibilityNodeInfo, depth: Int = 0): AccessibilityNodeInfo? {
+                if (depth > 60) return null
+                val labels = listOf(node.contentDescription?.toString(), node.text?.toString(), node.viewIdResourceName)
+                if (inTopLeft(node) && labels.any { label ->
+                        label != null && keywords.any { label.contains(it, ignoreCase = true) }
+                    }) {
+                    var target: AccessibilityNodeInfo? = node
+                    repeat(5) {
+                        val candidate = target ?: return@repeat
+                        if (candidate.isClickable && inTopLeft(candidate)) return candidate
+                        target = candidate.parent
+                    }
+                }
+                for (i in 0 until node.childCount) {
+                    val child = node.getChild(i) ?: continue
+                    findButton(child, depth + 1)?.let { return it }
+                }
+                return null
+            }
+            val button = findButton(root)
+            if (button != null) {
+                val bounds = Rect()
+                button.getBoundsInScreen(bounds)
+                val clicked = try { button.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) { false }
+                if (clicked) {
+                    diag("sidebar: ACTION_CLICK rect=$bounds")
+                } else {
+                    val dispatched = tapAt(bounds.exactCenterX(), bounds.exactCenterY())
+                    diag("sidebar: button tap dispatched=$dispatched rect=$bounds")
+                }
+            } else {
+                val statusId = resources.getIdentifier("status_bar_height", "dimen", "android")
+                val statusHeight = if (statusId != 0) resources.getDimensionPixelSize(statusId) else (24 * dm.density).toInt()
+                val x = 28 * dm.density
+                val y = statusHeight + 28 * dm.density
+                val dispatched = tapAt(x, y)
+                diag("sidebar: fallback tap dispatched=$dispatched x=$x y=$y")
+            }
+        } catch (e: Exception) {
+            diag("sidebar: failed ${e.javaClass.simpleName}")
+        }
+    }
 
     private var lastVolKeyAt = 0L
 

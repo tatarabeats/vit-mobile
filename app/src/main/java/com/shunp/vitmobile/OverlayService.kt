@@ -13,10 +13,12 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.MotionEvent
@@ -50,6 +52,16 @@ class OverlayService : Service() {
           * 左右のキワの帯の幅。タッチを横取りしないので、広めに取っても下のアプリに影響しない。
           */
         const val BAND_W_DP = 40
+
+        private var sidebarOverlayInstance: OverlayService? = null
+
+        /** 既存サービスだけに通知する。設定変更やアプリ遷移で録音サービスを起動しない。 */
+        fun refreshClaudeSwipe() {
+            val service = sidebarOverlayInstance ?: return
+            service.mainHandler.post {
+                if (sidebarOverlayInstance === service) service.updateClaudeSwipeOverlay()
+            }
+        }
     }
 
     private lateinit var wm: WindowManager
@@ -82,6 +94,7 @@ class OverlayService : Service() {
     private var density = 1f
     private var screenWidth = 0
     private var screenHeight = 0
+    private var claudeSwipeView: View? = null
     private var lastMicY = 0  // 収納時の高さを保持
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -95,6 +108,8 @@ class OverlayService : Service() {
         super.onCreate()
         startAsForeground()
         setupOverlay()
+        sidebarOverlayInstance = this
+        updateClaudeSwipeOverlay()
         recorder = VoiceRecorder(this)
         recorder?.recoverPending()
     }
@@ -245,6 +260,111 @@ class OverlayService : Service() {
         } else {
             wm.addView(micButton, micParams)
         }
+    }
+
+    // 録音の zoneViews / hotZone には追加しない独立した透明帯。
+    private fun updateClaudeSwipeOverlay() {
+        val shouldShow = Settings.canDrawOverlays(this) && Prefs.isClaudeSwipeEnabled(this)
+            && InputAccessibilityService.instance?.sidebarForegroundPackage == InputAccessibilityService.CLAUDE_PACKAGE
+        if (!shouldShow) {
+            removeClaudeSwipeOverlay()
+            return
+        }
+        if (claudeSwipeView != null) return
+        val dm = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getRealMetrics(dm)
+        val height = (200 * dm.density).toInt().coerceAtMost(dm.heightPixels)
+        val params = WindowManager.LayoutParams(
+            (18 * dm.density).toInt(), height,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            // START では RTL 言語で右端になるため、物理的な左端を指定する。
+            gravity = Gravity.TOP or Gravity.LEFT
+            x = 0
+            y = (dm.heightPixels * 0.4f).toInt().coerceAtMost(dm.heightPixels - height)
+        }
+        val view = View(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        view.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                v.systemGestureExclusionRects = listOf(Rect(0, 0, v.width, v.height.coerceAtMost(height)))
+            }
+        }
+        val slop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
+        var downX = 0f
+        var downY = 0f
+        var moved = false
+        var cancelled = false
+        view.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    moved = false
+                    cancelled = false
+                }
+                MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> cancelled = true
+                MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> {
+                    val dx = event.rawX - downX
+                    val dy = event.rawY - downY
+                    if (abs(dx) > slop || abs(dy) > slop) moved = true
+                    if (event.actionMasked == MotionEvent.ACTION_UP && !cancelled) {
+                        if (dx >= 40 * dm.density && dx > abs(dy)) {
+                            InputAccessibilityService.instance?.openClaudeSidebar()
+                        } else if (!moved) {
+                            forwardClaudeTap(view, params, downX, downY)
+                        }
+                    }
+                }
+            }
+            true
+        }
+        try {
+            wm.addView(view, params)
+            claudeSwipeView = view
+        } catch (_: Exception) {
+            // 権限取り消しと addView が競合しても既存サービスは継続する。
+        }
+    }
+
+    private fun forwardClaudeTap(view: View, params: WindowManager.LayoutParams, x: Float, y: Float) {
+        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        // Android 12+ は NOT_TOUCHABLE だけでは下のアプリへのタップを遮る場合がある。
+        params.alpha = 0f
+        try { wm.updateViewLayout(view, params) } catch (_: Exception) { return }
+        mainHandler.postDelayed({
+            if (claudeSwipeView !== view) return@postDelayed
+            val service = InputAccessibilityService.instance
+            if (!Settings.canDrawOverlays(this) || !Prefs.isClaudeSwipeEnabled(this)
+                || service?.sidebarForegroundPackage != InputAccessibilityService.CLAUDE_PACKAGE
+                || InputAccessibilityService.currentPackage() != InputAccessibilityService.CLAUDE_PACKAGE
+            ) {
+                removeClaudeSwipeOverlay()
+                return@postDelayed
+            }
+            // WindowManager にタッチ不可が反映されてから注入する。
+            InputAccessibilityService.passThroughTap(x, y)
+            mainHandler.postDelayed({
+                if (claudeSwipeView === view) {
+                    params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                    params.alpha = 1f
+                    try { wm.updateViewLayout(view, params) } catch (_: Exception) {}
+                }
+                updateClaudeSwipeOverlay()
+            }, 100)
+        }, 32)
+    }
+
+    private fun removeClaudeSwipeOverlay() {
+        claudeSwipeView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        claudeSwipeView = null
     }
 
     // ==================== 起動ゾーン（既定の起動方法） ====================
@@ -883,6 +1003,8 @@ class OverlayService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        removeClaudeSwipeOverlay()
+        updateClaudeSwipeOverlay()
         // 画面回転時に新しい画面サイズを取得して、バーを再配置する
         val dm = DisplayMetrics()
         @Suppress("DEPRECATION")
@@ -935,6 +1057,8 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        sidebarOverlayInstance = null
+        removeClaudeSwipeOverlay()
         mainHandler.removeCallbacksAndMessages(null)
         removeAllViews()
         recorder?.release()

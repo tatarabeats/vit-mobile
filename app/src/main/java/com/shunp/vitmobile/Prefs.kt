@@ -19,6 +19,16 @@ object Prefs {
     private const val KEY_EXCLUDED = "excluded_packages"
     private const val KEY_AUTO_ENTER = "auto_enter_packages"
     private const val KEY_AUTO_ENTER_ON = "auto_enter_enabled"
+    private const val KEY_CLAUDE_SWIPE = "claude_sidebar_swipe"
+
+    fun isClaudeSwipeEnabled(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_CLAUDE_SWIPE, true)
+
+    fun setClaudeSwipeEnabled(ctx: Context, enabled: Boolean) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_CLAUDE_SWIPE, enabled).apply()
+    }
 
     /** 起動方法: "zone" = 透明ゾーンをダブルタップ（既定） / "mic" = マイクを常時表示 */
     const val TRIGGER_ZONE = "zone"
