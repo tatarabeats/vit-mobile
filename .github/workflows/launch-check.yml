@@ -57,6 +57,7 @@ jobs:
             adb logcat -c
             adb shell am start -W -n com.shunp.vitmobile/.MainActivity
             sleep 8
+            bash .github/scripts/tap-tabs.sh
             adb shell am start -W -n com.shunp.vitmobile/.HistoryActivity || true
             sleep 3
             adb logcat -d > logcat.txt
@@ -73,3 +74,4 @@ jobs:
           path: |
             logcat.txt
             crash.txt
+            shot-*.png
