@@ -17,4 +17,42 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>
+
+    <!-- MainActivityだけ常時ダーク。他画面のDayNightテーマは変更しない。 -->
+    <style name="Theme.VitMobile.Main" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="colorPrimary">#F0C040</item>
+        <item name="colorPrimaryVariant">#F0C040</item>
+        <item name="colorOnPrimary">#0A0E1A</item>
+        <item name="colorSecondary">#F0C040</item>
+        <item name="colorOnSecondary">#0A0E1A</item>
+        <item name="colorAccent">#F0C040</item>
+        <item name="colorSurface">#131A2E</item>
+        <item name="colorOnSurface">#FFFFFF</item>
+        <item name="android:colorBackground">#0A0E1A</item>
+        <item name="android:windowBackground">#0A0E1A</item>
+        <item name="android:statusBarColor">#0A0E1A</item>
+        <item name="android:navigationBarColor">#131A2E</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="android:textColorSecondary">#B3FFFFFF</item>
+        <item name="android:textColorHint">#99FFFFFF</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.VitMobile.MainDialog</item>
+        <item name="materialButtonStyle">@style/Vit.Button</item>
+    </style>
+    <style name="ThemeOverlay.VitMobile.MainDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorPrimary">#F0C040</item>
+        <item name="colorSecondary">#F0C040</item>
+        <item name="colorSurface">#131A2E</item>
+        <item name="colorOnSurface">#FFFFFF</item>
+        <item name="android:colorBackground">#131A2E</item>
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="android:textColorSecondary">#B3FFFFFF</item>
+        <item name="android:textColorHint">#99FFFFFF</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/Vit.CardTitle</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/Vit.Label</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Vit.DialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Vit.DialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Vit.DialogButton</item>
+    </style>
 </resources>
