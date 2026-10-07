@@ -1,0 +1,6 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/nav_home" android:icon="@drawable/ic_main_home" android:title="ホーム" />
+    <item android:id="@+id/nav_apps" android:icon="@drawable/ic_main_apps" android:title="アプリ" />
+    <item android:id="@+id/nav_words" android:icon="@drawable/ic_main_book" android:title="言葉" />
+    <item android:id="@+id/nav_details" android:icon="@drawable/ic_main_tools" android:title="詳細" />
+</menu>

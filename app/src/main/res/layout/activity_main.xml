@@ -1,240 +1,310 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FF0A0E1A"
-    android:fillViewport="true">
-
-    <LinearLayout
-        android:orientation="vertical"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#0A0E1A">
+    <TextView
+        style="@style/Vit.CardTitle"
+        android:text="@string/app_name"
         android:paddingStart="18dp"
         android:paddingEnd="18dp"
-        android:paddingTop="22dp"
-        android:paddingBottom="28dp">
-
-        <!-- 見出しと状態 -->
-        <TextView
+        android:paddingTop="16dp"
+        android:paddingBottom="8dp"/>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <ScrollView
+            android:id="@+id/homeSection"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textSize="26sp"
-            android:textStyle="bold"
-            android:textColor="#FFF0C040" />
-
-        <TextView
-            android:id="@+id/statusText"
-            style="@style/Vit.Note"
-            android:textSize="14sp" />
-
-        <!-- 準備が足りない時だけ出す -->
-        <LinearLayout
-            android:id="@+id/setupCard"
-            style="@style/Vit.Card"
-            android:background="@drawable/warn_bg"
-            android:visibility="gone">
-
-            <TextView
-                style="@style/Vit.CardTitle"
-                android:textColor="#FFFF9A60"
-                android:text="使う前に必要な設定" />
-
-            <Button
-                android:id="@+id/btnOverlayPerm"
-                style="@style/Vit.Button"
-                android:text="他のアプリの上に表示を許可" />
-
-            <Button
-                android:id="@+id/btnAccessibilityPerm"
-                style="@style/Vit.Button"
-                android:text="ユーザー補助をON" />
-
-            <Button
-                android:id="@+id/btnMicPerm"
-                style="@style/Vit.Button"
-                android:text="マイクを許可" />
-
-            <TextView
-                android:id="@+id/needKeyText"
-                style="@style/Vit.Note"
-                android:layout_marginTop="10dp"
-                android:text="下の「詳細設定」で Groq APIキーを入れてください" />
-        </LinearLayout>
-
-        <Button
-            android:id="@+id/btnHistory"
-            style="@style/Vit.Button.Primary"
-            android:layout_marginTop="16dp"
-            android:minHeight="56dp"
-            android:textSize="16sp"
-            android:text="履歴" />
-
-        <!-- 自動送信 -->
-        <LinearLayout style="@style/Vit.Card">
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/autoEnterSwitch"
-                style="@style/Vit.Switch"
-                android:textStyle="bold"
-                android:text="自動送信" />
-
-            <TextView
-                style="@style/Vit.Note"
-                android:text="入力したあと送信ボタンまで押すアプリ。入力欄を選んでいなくても入れます" />
-
-            <GridLayout
-                android:id="@+id/autoEnterApps"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/field_bg"
-                android:padding="8dp"
-                android:minHeight="56dp" />
-
-            <Button
-                android:id="@+id/pickAutoEnter"
-                style="@style/Vit.Button"
-                android:text="アプリを選ぶ" />
-        </LinearLayout>
-
-        <!-- 除外アプリ -->
-        <LinearLayout style="@style/Vit.Card">
-
-            <TextView
-                style="@style/Vit.CardTitle"
-                android:text="除外アプリ" />
-
-            <TextView
-                style="@style/Vit.Note"
-                android:text="録音の操作に反応しないアプリ（入力欄を選んでいる時は使えます）" />
-
-            <GridLayout
-                android:id="@+id/excludedApps"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/field_bg"
-                android:padding="8dp"
-                android:minHeight="56dp" />
-
-            <Button
-                android:id="@+id/pickExcluded"
-                style="@style/Vit.Button"
-                android:text="アプリを選ぶ" />
-        </LinearLayout>
-
-        <!-- 文字の整え -->
-        <LinearLayout style="@style/Vit.Card">
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/llmFixSwitch"
-                style="@style/Vit.Switch"
-                android:textStyle="bold"
-                android:text="文章を整える" />
-
-            <TextView
-                style="@style/Vit.Label"
-                android:text="辞書（よく間違う言葉。1行に1つ）" />
-
-            <EditText
-                android:id="@+id/dictionaryInput"
-                style="@style/Vit.Field"
-                android:minHeight="80dp"
-                android:gravity="top|start"
-                android:inputType="textMultiLine" />
-
-            <TextView
-                style="@style/Vit.Label"
-                android:text="置き換え" />
-
-            <TextView
-                style="@style/Vit.Note"
-                android:text="左の言葉だけを喋ると、右の文字が入ります（例: 「メアド」→ メールアドレス）。文の途中で言った時は置き換えません" />
-
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="visible">
             <LinearLayout
-                android:id="@+id/snippetsBox"
                 android:orientation="vertical"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <Button
-                android:id="@+id/btnAddSnippet"
-                style="@style/Vit.Button"
-                android:text="＋ 追加" />
-
-            <TextView
-                style="@style/Vit.Note"
-                android:text="書いた内容はその場で保存されます" />
-        </LinearLayout>
-
-        <!-- 詳細設定（ふだん触らないもの） -->
-        <Button
-            android:id="@+id/btnToggleAdvanced"
-            style="@style/Vit.Button"
-            android:layout_marginTop="18dp"
-            android:text="詳細設定を開く" />
-
-        <LinearLayout
-            android:id="@+id/advancedBox"
-            style="@style/Vit.Card"
+                android:layout_height="wrap_content"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="24dp">
+                <LinearLayout style="@style/Vit.Card">
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <ImageView
+                            android:id="@+id/statusIcon"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:src="@drawable/ic_mic"
+                            android:importantForAccessibility="no"
+                            android:layout_marginEnd="14dp"/>
+                        <TextView
+                            android:id="@+id/statusText"
+                            style="@style/Vit.CardTitle"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:text="止まっています"/>
+                    </LinearLayout>
+                    <TextView android:id="@+id/statusHint" style="@style/Vit.Note"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRun"
+                        style="@style/Vit.Button.Primary"
+                        android:text="動かす"
+                        android:visibility="gone"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnOverlayPerm"
+                        style="@style/Vit.Button"
+                        android:text="他のアプリの上に表示"
+                        android:visibility="gone"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnAccessibilityPerm"
+                        style="@style/Vit.Button"
+                        android:text="ユーザー補助の設定"
+                        android:visibility="gone"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnMicPerm"
+                        style="@style/Vit.Button"
+                        android:text="マイクの使用を許可"
+                        android:visibility="gone"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSetupKey"
+                        style="@style/Vit.Button"
+                        android:text="APIキーの設定へ"
+                        android:visibility="gone"/>
+                </LinearLayout>
+                <LinearLayout style="@style/Vit.Card">
+                    <TextView
+                        style="@style/Vit.CardTitle"
+                        android:text="最近の履歴"
+                        android:drawableStart="@drawable/ic_main_history"/>
+                    <TextView style="@style/Vit.Note" android:text="タップするとコピーできます"/>
+                    <LinearLayout
+                        android:id="@+id/recentHistoryBox"
+                        android:orientation="vertical"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnHistory"
+                        style="@style/Vit.Button"
+                        android:text="すべて見る"/>
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+        <ScrollView
+            android:id="@+id/appsSection"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
             android:visibility="gone">
-
-            <TextView
-                style="@style/Vit.CardTitle"
-                android:text="APIキー" />
-
-            <TextView
-                style="@style/Vit.Label"
-                android:layout_marginTop="8dp"
-                android:text="Groq（文字起こし・必須）" />
-
-            <EditText
-                android:id="@+id/apiKeyInput"
-                style="@style/Vit.Field"
-                android:inputType="textPassword"
-                android:singleLine="true" />
-
-            <TextView
-                style="@style/Vit.Label"
-                android:text="Anthropic（文章を整える・任意）" />
-
-            <EditText
-                android:id="@+id/anthropicKeyInput"
-                style="@style/Vit.Field"
-                android:inputType="textPassword"
-                android:singleLine="true" />
-
-            <TextView
-                style="@style/Vit.CardTitle"
-                android:layout_marginTop="22dp"
-                android:text="困った時" />
-
-            <Button
-                android:id="@+id/btnAutoSendDiag"
-                style="@style/Vit.Button"
-                android:text="自動送信の記録を見る" />
-
-            <Button
-                android:id="@+id/btnOpenAccessibility"
-                style="@style/Vit.Button"
-                android:text="ユーザー補助の設定を開く" />
-
-            <Button
-                android:id="@+id/btnRestart"
-                style="@style/Vit.Button"
-                android:text="VIT を再起動" />
-
-            <Button
-                android:id="@+id/btnStopOverlay"
-                style="@style/Vit.Button"
-                android:text="VIT を止める" />
-        </LinearLayout>
-
-        <Button
-            android:id="@+id/btnUpdate"
-            style="@style/Vit.Button"
-            android:layout_marginTop="18dp"
-            android:text="更新を確認" />
-    </LinearLayout>
-</ScrollView>
+            <LinearLayout
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="24dp">
+                <LinearLayout style="@style/Vit.Card">
+                    <TextView
+                        style="@style/Vit.CardTitle"
+                        android:text="自動送信"
+                        android:drawableStart="@drawable/ic_main_send"/>
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/autoEnterSwitch"
+                        style="@style/Vit.Switch"
+                        android:text="自動送信を使う"/>
+                    <TextView style="@style/Vit.Note" android:text="入力したあと送信ボタンまで押すアプリ。入力欄を選んでいなくても入れます"/>
+                    <GridLayout
+                        android:id="@+id/autoEnterApps"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/field_bg"
+                        android:padding="8dp"
+                        android:minHeight="56dp"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/pickAutoEnter"
+                        style="@style/Vit.Button"
+                        android:text="アプリを選ぶ"/>
+                    <TextView style="@style/Vit.Note" android:text="アイコンの長押しで一覧から外せます"/>
+                </LinearLayout>
+                <LinearLayout style="@style/Vit.Card">
+                    <TextView
+                        style="@style/Vit.CardTitle"
+                        android:text="除外アプリ"
+                        android:drawableStart="@drawable/ic_main_block"/>
+                    <TextView style="@style/Vit.Note" android:text="録音の操作に反応しないアプリ（入力欄を選んでいる時は使えます）"/>
+                    <GridLayout
+                        android:id="@+id/excludedApps"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/field_bg"
+                        android:padding="8dp"
+                        android:minHeight="56dp"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/pickExcluded"
+                        style="@style/Vit.Button"
+                        android:text="アプリを選ぶ"/>
+                    <TextView style="@style/Vit.Note" android:text="アイコンの長押しで一覧から外せます"/>
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+        <ScrollView
+            android:id="@+id/wordsSection"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone">
+            <LinearLayout
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="24dp">
+                <LinearLayout style="@style/Vit.Card">
+                    <TextView
+                        style="@style/Vit.CardTitle"
+                        android:text="文章を整える"
+                        android:drawableStart="@drawable/ic_main_book"/>
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/llmFixSwitch"
+                        style="@style/Vit.Switch"
+                        android:text="文章を整える機能を使う"/>
+                </LinearLayout>
+                <LinearLayout style="@style/Vit.Card">
+                    <TextView
+                        style="@style/Vit.CardTitle"
+                        android:text="辞書"
+                        android:drawableStart="@drawable/ic_main_book"/>
+                    <TextView style="@style/Vit.Note" android:text="よく間違う言葉を1行に1語。書いた内容はその場で保存されます"/>
+                    <LinearLayout
+                        android:id="@+id/dictionaryBox"
+                        android:orientation="vertical"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnAddDictionary"
+                        style="@style/Vit.Button"
+                        android:text="＋ 追加"/>
+                </LinearLayout>
+                <LinearLayout style="@style/Vit.Card">
+                    <TextView
+                        style="@style/Vit.CardTitle"
+                        android:text="置き換え"
+                        android:drawableStart="@drawable/ic_main_replace"/>
+                    <TextView
+                        style="@style/Vit.Note"
+                        android:text="左の言葉だけを話すと、右の文字が入ります（例：「メアド」→ メールアドレス）。文の途中では置き換えません"/>
+                    <LinearLayout
+                        android:id="@+id/snippetsBox"
+                        android:orientation="vertical"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnAddSnippet"
+                        style="@style/Vit.Button"
+                        android:text="＋ 追加"/>
+                    <TextView style="@style/Vit.Note" android:text="書いた内容はその場で保存されます"/>
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+        <ScrollView
+            android:id="@+id/detailsSection"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone">
+            <LinearLayout
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="24dp">
+                <LinearLayout style="@style/Vit.Card">
+                    <TextView
+                        style="@style/Vit.CardTitle"
+                        android:text="APIキー"
+                        android:drawableStart="@drawable/ic_main_key"/>
+                    <TextView
+                        style="@style/Vit.Label"
+                        android:text="Groq（文字起こし・必須）"
+                        android:labelFor="@id/apiKeyInput"/>
+                    <EditText
+                        android:id="@+id/apiKeyInput"
+                        style="@style/Vit.Field"
+                        android:inputType="textPassword"
+                        android:singleLine="true"/>
+                    <TextView
+                        style="@style/Vit.Label"
+                        android:text="Anthropic（文章を整える・任意）"
+                        android:labelFor="@id/anthropicKeyInput"/>
+                    <EditText
+                        android:id="@+id/anthropicKeyInput"
+                        style="@style/Vit.Field"
+                        android:inputType="textPassword"
+                        android:singleLine="true"/>
+                    <TextView style="@style/Vit.Note" android:text="書いた内容はその場で保存されます"/>
+                </LinearLayout>
+                <LinearLayout style="@style/Vit.Card">
+                    <TextView
+                        style="@style/Vit.CardTitle"
+                        android:text="自動送信の記録"
+                        android:drawableStart="@drawable/ic_main_send"/>
+                    <LinearLayout
+                        android:id="@+id/diagSummaryBox"
+                        android:orientation="vertical"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"/>
+                    <TextView style="@style/Vit.Note" android:text="記録に残った各結果の回数です。再試行も1回ずつ数えます"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnAutoSendDiag"
+                        style="@style/Vit.Button"
+                        android:text="生の記録を見る"/>
+                </LinearLayout>
+                <LinearLayout style="@style/Vit.Card">
+                    <TextView
+                        style="@style/Vit.CardTitle"
+                        android:text="操作と更新"
+                        android:drawableStart="@drawable/ic_main_tools"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnOpenAccessibility"
+                        style="@style/Vit.Button"
+                        android:text="ユーザー補助の設定を開く"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRestart"
+                        style="@style/Vit.Button"
+                        android:text="VIT を再起動"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnStopOverlay"
+                        style="@style/Vit.Button"
+                        android:text="VIT を止める"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnUpdate"
+                        style="@style/Vit.Button"
+                        android:text="更新を確認"/>
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+    </FrameLayout>
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNavigation"
+        android:saveEnabled="false"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#131A2E"
+        app:menu="@menu/main_navigation"
+        app:labelVisibilityMode="labeled"
+        app:itemHorizontalTranslationEnabled="false"
+        app:itemIconTint="@color/main_nav_tint"
+        app:itemTextColor="@color/main_nav_tint"
+        app:itemTextAppearanceActive="@style/Vit.TextNote"
+        app:itemTextAppearanceInactive="@style/Vit.TextNote"/>
+</LinearLayout>
