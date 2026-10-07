@@ -2,7 +2,7 @@
 # 下のタブを順に押して、各画面の写真を撮る（launch-check.yml から呼ぶ）
 set -u
 adb exec-out screencap -p > shot-0-start.png
-for label in アプリ 言葉 詳細 ホーム; do
+for label in 言葉 詳細 アプリ ホーム; do
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 || true
   adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1 || true
   b=$(python3 - "$label" <<'PY'
@@ -13,5 +13,5 @@ print('' if not m else '%d %d' % ((int(m.group(1)) + int(m.group(3))) // 2, (int
 PY
 )
   echo "tab $label at $b"
-  if [ -n "$b" ]; then adb shell input tap $b; sleep 2; adb exec-out screencap -p > "shot-tab-$label.png"; fi
+  if [ -n "$b" ]; then adb shell input tap $b; sleep 3; adb exec-out screencap -p > "shot-tab-$label.png"; fi
 done
