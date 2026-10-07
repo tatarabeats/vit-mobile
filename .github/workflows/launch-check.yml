@@ -1,0 +1,75 @@
+name: Launch check
+
+# 仮想端末でアプリを起動し、起動直後に落ちないかを確かめる（2026-10-07 v0.9.29 が起動直後に落ちた件から）。
+# 落ちた場合はクラッシュの記録（logcat）を成果物に残す。
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "調べる版（タグ・ブランチ・コミット）"
+        required: false
+        default: ""
+  push:
+    tags: ["v*.*.*"]
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.5"
+
+      - name: Build debug APK
+        run: |
+          gradle wrapper --gradle-version 8.5
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Launch on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb logcat -c
+            adb shell am start -W -n com.shunp.vitmobile/.MainActivity
+            sleep 8
+            adb shell am start -W -n com.shunp.vitmobile/.HistoryActivity || true
+            sleep 3
+            adb logcat -d > logcat.txt
+            adb logcat -d -b crash > crash.txt || true
+            echo "---- crash buffer ----"; cat crash.txt
+            if grep -q "FATAL EXCEPTION" logcat.txt crash.txt; then grep -A40 "FATAL EXCEPTION" logcat.txt | head -80; exit 1; fi
+            echo "LAUNCH OK"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: launch-logs
+          path: |
+            logcat.txt
+            crash.txt
