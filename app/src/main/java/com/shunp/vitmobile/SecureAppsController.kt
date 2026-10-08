@@ -126,12 +126,6 @@ internal class SecureAppsController private constructor(context: Context) : Secu
 
         /** Worker-thread IPC. The command is fixed/allowlisted by the shell-side service. */
         fun grantPermission(context: Context, remote: IShizukuTouchService) {
-            if (!android.provider.Settings.System.canWrite(context)) {
-                try {
-                    val r = remote.runShell("appops set com.shunp.vitmobile WRITE_SETTINGS allow")
-                    log(context, "write settings grant exit=$r ok=${android.provider.Settings.System.canWrite(context)}")
-                } catch (e: Exception) { log(context, "write settings grant failed ${e.javaClass.simpleName}") }
-            }
             if (context.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED) return
             val user = android.os.Process.myUid() / 100_000
             try {
