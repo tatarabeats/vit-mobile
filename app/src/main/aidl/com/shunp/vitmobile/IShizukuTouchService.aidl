@@ -7,4 +7,7 @@ interface IShizukuTouchService {
     ParcelFileDescriptor readEvents(String device) = 1;
     // Shizuku's reserved destroy transaction (FIRST_CALL_TRANSACTION + this ID).
     void destroy() = 16777114;
+    // Explicit IDs preserve the existing transactions, including Shizuku's destroy.
+    int installApk(in ParcelFileDescriptor apk, long size) = 2;
+    String getLastInstallOutput() = 3;
 }

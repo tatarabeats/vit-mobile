@@ -36,7 +36,7 @@ object Updater {
     private const val CHANNEL = "vit_update"
     private const val NOTIF_ID = 42
     internal const val ACTION_INSTALL_RESULT = "com.shunp.vitmobile.INSTALL_RESULT"
-    const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
+    const val CHECK_INTERVAL_MS = 60 * 60 * 1000L
     private const val RETRY_MS = 30_000L
     private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L
     private const val MIN_APK_BYTES = 1024 * 1024L
@@ -117,21 +117,46 @@ object Updater {
                 return@launch
             }
             try {
+                log(app, "check start manual=$manual cachedOnly=$cachedOnly")
+                recordReplacedVersion(app)
                 if (sessionMutex.withLock { hasPendingSession(app) }) {
+                    log(app, "check skipped: PackageInstaller session pending")
                     if (manual) toast(app, "Androidの更新確認を待っています")
                     return@launch
                 }
                 // 設定画面でプロセスが再生成されても、許可待ちのAPKはネット接続なしで再開。
                 val resumeCached = cachedOnly || prefs(app).getBoolean("waiting_permission", false)
                 val rel = if (resumeCached) cachedRelease(app) ?: fetchLatest() else fetchLatest()
+                log(app, "check latest=${rel.version} installed=${BuildInfo.versionName(app)}")
                 if (!isNewer(rel.version, BuildInfo.versionName(app))) {
+                    log(app, "check up-to-date")
                     app.getSystemService(NotificationManager::class.java).cancel(NOTIF_ID)
                     prefs(app).edit().putBoolean("waiting_permission", false).apply()
                     if (manual) toast(app, "最新です")
                     return@launch
                 }
                 val file = download(app, rel)
-                waitForRecording()
+                waitForRecording(app)
+                if (ShizukuApkInstaller.install(app, file) {
+                        waitForRecording(app)
+                        validateApk(app, file)
+                        // pm may replace/kill us before its Binder reply. Recover the result on restart.
+                        @Suppress("DEPRECATION")
+                        val target = app.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
+                            ?: throw IOException("invalid APK before install")
+                        if (!prefs(app).edit().putLong("shizuku_target", versionCode(target)).commit()) {
+                            throw IOException("cannot save shizuku install state")
+                        }
+                    }
+                ) {
+                    prefs(app).edit().putBoolean("waiting_permission", false).apply()
+                    return@launch
+                }
+                // A package replacement can disconnect the UserService before its successful reply.
+                if (recordReplacedVersion(app)) return@launch
+                prefs(app).edit().remove("shizuku_target").commit()
+                log(app, "PackageInstaller fallback")
+                waitForRecording(app)
                 if (!app.packageManager.canRequestPackageInstalls()) {
                     val alreadyAsked = prefs(app).getBoolean("waiting_permission", false)
                     prefs(app).edit().putBoolean("waiting_permission", true).commit()
@@ -190,6 +215,7 @@ object Updater {
         ) {
             try {
                 validateApk(ctx, file)
+                log(ctx, "download cached version=${rel.version} size=${file.length()}")
                 return file
             } catch (_: IOException) {
                 // 破損したキャッシュだけ再取得する。
@@ -199,6 +225,7 @@ object Updater {
         if (!dir.isDirectory && !dir.mkdirs()) throw IOException("cannot create update directory")
         val temp = File(dir, "vit-update.part.apk")
         try {
+            log(ctx, "download start version=${rel.version}")
             val req = Request.Builder().url(rel.apkUrl).header("User-Agent", "VitMobile").build()
             client.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) throw IOException("APK HTTP ${resp.code}")
@@ -228,7 +255,11 @@ object Updater {
             if (!prefs(ctx).edit().putString("downloaded_version", rel.version)
                     .putString("downloaded_url", rel.apkUrl).putLong("downloaded_size", file.length()).commit()
             ) throw IOException("cannot save downloaded version")
+            log(ctx, "download complete version=${rel.version} size=${file.length()}")
             return file
+        } catch (e: Exception) {
+            log(ctx, "download failed: ${e.javaClass.simpleName}: ${e.message}")
+            throw e
         } finally {
             temp.delete()
         }
@@ -249,12 +280,16 @@ object Updater {
     private fun versionCode(info: PackageInfo): Long =
         if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
 
-    private suspend fun waitForRecording() {
+    private suspend fun waitForRecording(ctx: Context) {
+        val waiting = OverlayService.isRecordingNow
+        if (waiting) log(ctx, "install waiting for recording")
         while (OverlayService.isRecordingNow) delay(RETRY_MS)
+        if (waiting) log(ctx, "recording finished; resume install")
     }
 
     private suspend fun install(ctx: Context, file: File) {
-        waitForRecording()
+        waitForRecording(ctx)
+        validateApk(ctx, file)
         val installer = ctx.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(ctx.packageName)
@@ -292,6 +327,7 @@ object Updater {
                         val sent = withContext(Dispatchers.Main) {
                             if (OverlayService.isRecordingNow) false else {
                                 session.commit(result.intentSender)
+                                log(ctx, "PackageInstaller committed session=$sessionId")
                                 true
                             }
                         }
@@ -335,7 +371,7 @@ object Updater {
         return false
     }
 
-    /** コールバックを失った場合も6時間後まで待たずに取得済みAPKで再試行する。 */
+    /** コールバックを失った場合も1時間後まで待たずに取得済みAPKで再試行する。 */
     private fun scheduleSessionRetry(ctx: Context, delayMs: Long) {
         sessionRetryJob?.cancel()
         sessionRetryJob = scope.launch {
@@ -361,7 +397,9 @@ object Updater {
                     val id = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
                     if (id < 0 || id != prefs(app).getInt("session_id", -1)) return@withLock
                     try {
-                        when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+                        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+                        log(app, "PackageInstaller result session=$id status=$status")
+                        when (status) {
                             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                                 val confirmation = confirmationIntent(intent)
                                     ?: throw IOException("confirmation Intent missing")
@@ -395,7 +433,7 @@ object Updater {
     private suspend fun confirmWhenIdle(ctx: Context, id: Int, confirmation: Intent) {
         try {
             while (true) {
-                waitForRecording()
+                waitForRecording(ctx)
                 val done = sessionMutex.withLock {
                     if (prefs(ctx).getInt("session_id", -1) != id) return@withLock true
                     val shown = withContext(Dispatchers.Main) {
@@ -432,13 +470,32 @@ object Updater {
         Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show()
     }
 
-    private fun reportFailure(ctx: Context, message: String) {
+    /** Also called before BootReceiver's overlay/key guards, after a package replacement. */
+    @Suppress("DEPRECATION")
+    internal fun recordReplacedVersion(ctx: Context): Boolean {
+        val target = prefs(ctx).getLong("shizuku_target", -1L)
+        if (target < 0) return false
+        val installed = versionCode(ctx.packageManager.getPackageInfo(ctx.packageName, 0))
+        if (installed >= target) {
+            log(ctx, "shizuku install success verified after restart target=$target installed=$installed")
+            prefs(ctx).edit().remove("shizuku_target").putBoolean("waiting_permission", false).commit()
+            return true
+        }
+        return false
+    }
+
+    @Synchronized
+    internal fun log(ctx: Context, message: String) {
         val line = "${System.currentTimeMillis()} ${message.replace(Regex("[\\r\\n]+"), " ")}\n"
         try {
             File(ctx.filesDir, "update.log").appendText(line)
         } catch (e: Exception) {
             Log.w("VitUpdater", "Cannot write update.log", e)
         }
+    }
+
+    private fun reportFailure(ctx: Context, message: String) {
+        log(ctx, message)
         try {
             notify(ctx)
         } catch (e: Exception) {

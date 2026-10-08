@@ -2,6 +2,8 @@ package com.shunp.vitmobile
 
 import android.os.ParcelFileDescriptor
 import androidx.annotation.Keep
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlin.system.exitProcess
 
@@ -10,6 +12,75 @@ import kotlin.system.exitProcess
 class ShizukuTouchService : IShizukuTouchService.Stub() {
     private var process: Process? = null
     private var writer: ParcelFileDescriptor? = null
+    private val installLock = Any()
+    @Volatile private var installOutput = ""
+
+    override fun getLastInstallOutput(): String = installOutput
+
+    // Separate lock/process: installing must not stop or hold the getevent lifecycle lock.
+    override fun installApk(apk: ParcelFileDescriptor, size: Long): Int = synchronized(installLock) {
+        installOutput = ""
+        val output = StringBuffer()
+        fun record(text: String) = synchronized(output) {
+            val remaining = 16 * 1024 - output.length
+            if (remaining > 0) output.append(text.take(remaining))
+            Unit
+        }
+        var child: Process? = null
+        try {
+            apk.use {
+                require(size in 1..(100 * 1024 * 1024L) && apk.statSize == size) {
+                    "APK descriptor size mismatch"
+                }
+                val installer = ProcessBuilder("/system/bin/pm", "install", "-r", "-S", size.toString())
+                    .redirectErrorStream(true).start()
+                child = installer
+                val copyError = AtomicReference<Exception?>()
+                val inputThread = thread(name = "vit-apk-input", isDaemon = true) {
+                    try {
+                        ParcelFileDescriptor.AutoCloseInputStream(apk).use { input ->
+                            installer.outputStream.use { out ->
+                                check(input.copyTo(out) == size) { "APK stream size mismatch" }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        copyError.set(e)
+                        record("\nAPK input: ${e.javaClass.simpleName}: ${e.message}")
+                        runCatching { installer.outputStream.close() }
+                    }
+                }
+                // Drain concurrently, even after the retained output cap, to avoid a full pipe deadlock.
+                val outputThread = thread(name = "vit-apk-output", isDaemon = true) {
+                    try {
+                        installer.inputStream.bufferedReader().use { reader ->
+                            val buffer = CharArray(2048)
+                            while (true) {
+                                val count = reader.read(buffer)
+                                if (count < 0) break
+                                record(String(buffer, 0, count))
+                            }
+                        }
+                    } catch (e: Exception) { record("\nAPK output: ${e.message}") }
+                }
+                if (!installer.waitFor(2, TimeUnit.MINUTES)) {
+                    record("\npm install timed out")
+                    installer.destroyForcibly()
+                    -1
+                } else {
+                    inputThread.join(1_000)
+                    outputThread.join(1_000)
+                    val exit = installer.exitValue()
+                    if (exit == 0 && (copyError.get() != null || inputThread.isAlive)) -1 else exit
+                }
+            }
+        } catch (e: Exception) {
+            record("\ninstall: ${e.javaClass.simpleName}: ${e.message}")
+            -1
+        } finally {
+            runCatching { child?.destroyForcibly() }
+            installOutput = synchronized(output) { output.toString() }
+        }
+    }
 
     override fun listDevices(): ParcelFileDescriptor = launch("-pl")
 

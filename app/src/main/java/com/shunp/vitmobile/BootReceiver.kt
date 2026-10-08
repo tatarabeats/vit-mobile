@@ -19,6 +19,10 @@ class BootReceiver : BroadcastReceiver() {
             action != "android.intent.action.QUICKBOOT_POWERON" &&
             action != Intent.ACTION_MY_PACKAGE_REPLACED
         ) return
+        if (action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            Updater.log(ctx, "MY_PACKAGE_REPLACED: restore overlay; accessibility reconnects through Android")
+            Updater.recordReplacedVersion(ctx)
+        }
         // 権限もキーも無い状態で起こすと通知だけ出て邪魔になるので、揃っている時だけ
         if (!Settings.canDrawOverlays(ctx)) return
         if (Prefs.getGroqKey(ctx).isNullOrBlank()) return
