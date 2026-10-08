@@ -31,9 +31,11 @@ class GeteventSwipeParserTest {
             event("ABS_MT_TRACKING_ID", -1)
             return event("SYN_REPORT")
         }
+        /** なぞりの途中か、離した時のどちらかで判定が出たか（途中で決まる場合がある） */
         fun finish(x: Int, y: Int = 1000): Boolean {
-            move(x, y)
-            return up()
+            val mid = move(x, y)
+            val end = up()
+            return mid || end
         }
     }
 
@@ -149,6 +151,33 @@ class GeteventSwipeParserTest {
         assertFalse(s.move(1500))
         s.eligible = true
         assertFalse(s.finish(1800))
+    }
+
+    @Test fun leftSwipeIsDetectedAsCloseDirection() {
+        val s = Stream(device)
+        s.down(3000)
+        assertTrue(s.finish(2000))
+        assertEquals(-1, s.parser.lastDirection)
+    }
+
+    @Test fun rightSwipeDecidesMidGesture() {
+        val s = Stream(device)
+        s.down(1000)
+        s.time += 120
+        assertTrue(s.move(1500))
+        assertEquals(1, s.parser.lastDirection)
+        assertFalse(s.up())
+    }
+
+    @Test fun verticalScrollDriftingRightAtTheEndDoesNotOpen() {
+        val s = Stream(device)
+        s.down(1000, 2000)
+        s.time += 60
+        assertFalse(s.move(1050, 1600))
+        s.time += 60
+        assertFalse(s.move(1100, 1200))
+        s.time += 60
+        assertFalse(s.finish(1600, 1150))
     }
 
     @Test fun reversePortraitTransformsDirection() {
