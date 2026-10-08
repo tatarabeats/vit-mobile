@@ -65,13 +65,16 @@ class GeteventSwipeParserTest {
         assertNull(TouchDeviceDiscovery.parse(listing.replace("max 4095", "max 0")))
     }
 
-    @Test fun twelvePercentThresholdAndOnlyFireOnLift() {
+    @Test fun twelvePercentThresholdOnLiftAfterEarlyWindow() {
+        // 途中判定は 450ms まで。それを過ぎたら離した時に 12% で判定する
         val s = Stream(device)
         s.down()
-        s.time += 200
+        s.time += 500
         assertFalse(s.move(1491)) // 11.99% of raw width
         assertFalse(s.up())
+        s.time += 1000
         s.down()
+        s.time += 500
         assertFalse(s.move(1492))
         assertTrue(s.up())
         assertFalse(s.event("SYN_REPORT"))
@@ -84,8 +87,8 @@ class GeteventSwipeParserTest {
         assertFalse(s.finish(1600, 1200)) // dx=158px, dy=114px, despite raw dx/dy=3
     }
 
-    @Test fun leftAndVerticalAndShortMovementsDoNotFire() {
-        for ((x, y) in listOf(100 to 1000, 1010 to 1800, 1200 to 1000)) {
+    @Test fun verticalAndShortMovementsDoNotFire() {
+        for ((x, y) in listOf(1010 to 1800, 1200 to 1000)) {
             val s = Stream(device)
             s.down()
             s.time += 100
@@ -225,11 +228,11 @@ class GeteventSwipeParserTest {
         Stream(device).event("SYN_DROPPED")
     }
 
-    @Test fun secondFingerAfterCrossingThresholdStillCancels() {
+    @Test fun earlyFireThenSecondFingerDoesNotFireAgain() {
         val s = Stream(device)
         s.down()
         s.time += 100
-        assertFalse(s.move(1800))
+        assertTrue(s.move(1800))
         s.time += 100
         s.down(2000, 2000, 1)
         s.up()
