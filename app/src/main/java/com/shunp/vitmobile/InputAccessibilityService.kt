@@ -110,6 +110,7 @@ class InputAccessibilityService : AccessibilityService() {
         }
     }
     private val debugSidebarReceiver = DebugSidebarTargetReceiver()
+    private var shizukuSwipe: ShizukuSwipeMonitor? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -132,11 +133,16 @@ class InputAccessibilityService : AccessibilityService() {
         }
         configureSidebarObservation()
         updateSidebarForeground(sidebarWindowPackage())
+        if (shizukuSwipe == null) {
+            shizukuSwipe = ShizukuSwipeMonitor(this).also { it.start() }
+        }
         OverlayService.refreshClaudeSwipe()
         Log.d(TAG, "service connected")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        shizukuSwipe?.close()
+        shizukuSwipe = null
         try { unregisterReceiver(receiver) } catch (_: Exception) {}
         if (BuildConfig.DEBUG) try { unregisterReceiver(debugSidebarReceiver) } catch (_: Exception) {}
         cancelSidebarSwipe()
@@ -144,6 +150,20 @@ class InputAccessibilityService : AccessibilityService() {
         instance = null
         OverlayService.refreshClaudeSwipe()
         return super.onUnbind(intent)
+    }
+
+    override fun onDestroy() {
+        shizukuSwipe?.close()
+        shizukuSwipe = null
+        if (instance === this) instance = null
+        super.onDestroy()
+    }
+
+    internal fun refreshShizukuSwipe() { shizukuSwipe?.refresh() }
+
+    internal fun isClaudeForegroundForShizuku(): Boolean {
+        updateSidebarForeground(sidebarWindowPackage())
+        return sidebarForegroundPackage == CLAUDE_PACKAGE
     }
 
     /** フォーカスイベントを常時監視して、最後にフォーカスされた入力欄を記憶 */
@@ -273,6 +293,7 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     /** サイドバー専用。既存の入力先・録音用 currentPackage() の判定は変えない。 */
+    @Volatile
     var sidebarForegroundPackage: String? = null
         private set
 
@@ -286,7 +307,7 @@ class InputAccessibilityService : AccessibilityService() {
     /** Return value means click accepted / tap dispatched, not proof the drawer opened. */
     fun openClaudeSidebar(): Boolean {
         updateSidebarForeground(sidebarWindowPackage())
-        if (!isSidebarTargetActive()) {
+        if (sidebarForegroundPackage != CLAUDE_PACKAGE && !isSidebarTargetActive()) {
             sidebarDiag("skipped (disabled or target not foreground)")
             return false
         }
@@ -300,7 +321,7 @@ class InputAccessibilityService : AccessibilityService() {
                 return false
             }
             ownedNodes.add(root)
-            if (root.packageName?.toString() != DebugSidebarTargetReceiver.targetPackage(this)) {
+            if (root.packageName?.toString() != sidebarForegroundPackage) {
                 sidebarDiag("skipped (target window changed)")
                 return false
             }
@@ -325,8 +346,25 @@ class InputAccessibilityService : AccessibilityService() {
                 "desc=${label(node.contentDescription)} text=${label(node.text)} id=${label(node.viewIdResourceName)} rect=${rect(node)}"
             val topClickables = mutableListOf<AccessibilityNodeInfo>()
             val named = linkedMapOf<AccessibilityNodeInfo, String>()
+            val drawerLabels = mutableSetOf<String>()
+            var closeMenuVisible = false
             fun walk(node: AccessibilityNodeInfo, ancestors: List<AccessibilityNodeInfo>, depth: Int) {
                 if (depth > 60) return
+                val bounds = rect(node)
+                if (node.isVisibleToUser && !bounds.isEmpty && bounds.left >= 0
+                    && bounds.centerX() < dm.widthPixels * 0.65f
+                    && bounds.centerY() in 0..dm.heightPixels) {
+                    for (text in listOf(node.text, node.contentDescription)) {
+                        val value = label(text).trim().lowercase(java.util.Locale.ROOT)
+                        when (value) {
+                            "チャット", "chats" -> drawerLabels.add("chats")
+                            "プロジェクト", "projects" -> drawerLabels.add("projects")
+                            "code", "コード" -> drawerLabels.add("code")
+                            "メニューを閉じる", "close menu", "close sidebar", "close navigation menu",
+                            "サイドバーを閉じる" -> closeMenuVisible = true
+                        }
+                    }
+                }
                 if (node.isClickable && inTop(node)) topClickables.add(node)
                 if (inLeft(node) && listOf(node.contentDescription, node.text, node.viewIdResourceName)
                     .any { label -> label != null && keywords.any { label.contains(it, ignoreCase = true) } }) {
@@ -341,6 +379,11 @@ class InputAccessibilityService : AccessibilityService() {
                 }
             }
             walk(root, emptyList(), 0)
+            // Require two distinct navigation entries, avoiding a matching word in chat text.
+            if (closeMenuVisible || drawerLabels.size >= 2) {
+                ShizukuSwipeLog.write(this, "sidebar already open; skipped")
+                return false
+            }
             val orderedNamed = named.keys.sortedWith(compareBy({ rect(it).left }, { rect(it).top }))
             for (candidate in orderedNamed) {
                 sidebarDiag("candidate named ${describe(candidate)} matched=${named[candidate]}")

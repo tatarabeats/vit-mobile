@@ -27,6 +27,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var b: ActivityMainBinding
+    private val shizukuPermission by lazy { ShizukuSwipePermission(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         delegate.localNightMode = AppCompatDelegate.MODE_NIGHT_YES
@@ -126,6 +127,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (!hasMic()) requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        shizukuPermission.start()
+    }
+
+    override fun onStop() {
+        shizukuPermission.stop()
+        super.onStop()
     }
 
     override fun onResume() {
