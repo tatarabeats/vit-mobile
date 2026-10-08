@@ -156,11 +156,10 @@ class GeteventSwipeParserTest {
         assertFalse(s.finish(1800))
     }
 
-    @Test fun leftSwipeIsDetectedAsCloseDirection() {
+    @Test fun leftSwipeDoesNotFire() {
         val s = Stream(device)
         s.down(3000)
-        assertTrue(s.finish(2000))
-        assertEquals(-1, s.parser.lastDirection)
+        assertFalse(s.finish(2000))
     }
 
     @Test fun rightSwipeDecidesMidGesture() {
