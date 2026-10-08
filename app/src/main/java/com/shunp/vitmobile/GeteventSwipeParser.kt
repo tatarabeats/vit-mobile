@@ -43,6 +43,10 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
     private var startTime = 0L
     private var startX: Float? = null
     private var startY: Float? = null
+    private var maxAbsDy = 0f
+    private var minDx = 0f
+    /** 直前の1回のなぞりの縦横の動き（記録用） */
+    var lastGesture: String? = null
     private var startDisplay: SwipeDisplay? = null
     private var blocked = false
     private var lifted = false
@@ -101,15 +105,25 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         .toFloat() / device.maxX * display.width
                     val y = (if (display.rotation == 2) device.maxY - rawY else rawY)
                         .toFloat() / device.maxY * display.height
-                    if (startX == null) { startX = x; startY = y }
+                    if (startX == null) { startX = x; startY = y; maxAbsDy = 0f; minDx = 0f }
                     val dx = x - startX!!
                     val dy = y - startY!!
-                    if (lifted && slots.values.none { it.active }
-                        && time - startTime in 0L..700L && dx >= display.width * 0.12f
-                        && dx >= abs(dy) * 2 && (lastFire == null || time - lastFire!! >= 800)) {
-                        detected = true
-                        lastFire = time
-                        blocked = true
+                    // 途中の縦の動きも見る。上下スクロールの最後に指が右へ流れただけで開いていた（2026-10-08）
+                    if (abs(dy) > maxAbsDy) maxAbsDy = abs(dy)
+                    if (dx < minDx) minDx = dx
+                    if (lifted && slots.values.none { it.active }) {
+                        val ok = time - startTime in 0L..700L
+                            && dx >= display.width * 0.12f
+                            && dx >= maxAbsDy * 3
+                            && maxAbsDy < display.height * 0.06f
+                            && minDx > -display.width * 0.03f
+                            && (lastFire == null || time - lastFire!! >= 800)
+                        lastGesture = "dx=${dx.toInt()} maxDy=${maxAbsDy.toInt()} ms=${time - startTime} ok=$ok"
+                        if (ok) {
+                            detected = true
+                            lastFire = time
+                            blocked = true
+                        }
                     }
                 }
                 if (slots.values.none { it.active }) {

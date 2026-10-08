@@ -204,8 +204,13 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                         while (!cancelled) {
                             val line = reader.readLine() ?: break
                             val now = SystemClock.uptimeMillis()
-                            if (parser.accept(line, now, display,
-                                    owner.sidebarForegroundPackage == InputAccessibilityService.CLAUDE_PACKAGE)) {
+                            val accepted = parser.accept(line, now, display,
+                                owner.sidebarForegroundPackage == InputAccessibilityService.CLAUDE_PACKAGE)
+                            parser.lastGesture?.let {
+                                parser.lastGesture = null
+                                if (owner.sidebarForegroundPackage == InputAccessibilityService.CLAUDE_PACKAGE) log("gesture $it")
+                            }
+                            if (accepted) {
                                 main.post {
                                     if (cancelled || session !== this || !screenOn || !power.isInteractive
                                         || !display.portrait || SystemClock.uptimeMillis() - now > 700) return@post
