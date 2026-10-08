@@ -27,6 +27,7 @@ import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlin.math.abs
@@ -62,6 +63,20 @@ class OverlayService : Service() {
                 if (sidebarOverlayInstance === service) service.updateClaudeSwipeOverlay()
             }
         }
+
+        fun updateSidebarProgress(progress: Float) {
+            val service = sidebarOverlayInstance ?: return
+            service.mainHandler.post {
+                if (sidebarOverlayInstance === service) service.showSidebarProgress(progress)
+            }
+        }
+
+        fun finishSidebarProgress(open: Boolean) {
+            val service = sidebarOverlayInstance ?: return
+            service.mainHandler.post {
+                if (sidebarOverlayInstance === service) service.finishSidebarPanel(open)
+            }
+        }
     }
 
     private lateinit var wm: WindowManager
@@ -95,6 +110,11 @@ class OverlayService : Service() {
     private var screenWidth = 0
     private var screenHeight = 0
     private var claudeSwipeView: View? = null
+    private var sidebarPanelRoot: FrameLayout? = null
+    private var sidebarPanel: View? = null
+    private var sidebarPanelManager: WindowManager? = null
+    private var sidebarPanelWidth = 0
+    private var sidebarPanelGeneration = 0
     private var lastMicY = 0  // 収納時の高さを保持
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -264,8 +284,14 @@ class OverlayService : Service() {
 
     // 録音の zoneViews / hotZone には追加しない独立した透明帯。
     private fun updateClaudeSwipeOverlay() {
-        val shouldShow = Settings.canDrawOverlays(this) && Prefs.isClaudeSwipeEnabled(this)
-            && InputAccessibilityService.instance?.sidebarForegroundPackage == InputAccessibilityService.CLAUDE_PACKAGE
+        val service = InputAccessibilityService.instance
+        val targetActive = service?.isSidebarTargetActive() == true
+        if (!targetActive) {
+            service?.cancelSidebarSwipe()
+            removeSidebarPanel()
+        }
+        val shouldShow = Settings.canDrawOverlays(this) && targetActive
+            && service?.isSidebarObservationEnabled != true
         if (!shouldShow) {
             removeClaudeSwipeOverlay()
             return
@@ -303,23 +329,38 @@ class OverlayService : Service() {
         var moved = false
         var cancelled = false
         view.setOnTouchListener { _, event ->
+            if (InputAccessibilityService.instance?.isSidebarTargetActive() != true) {
+                cancelled = true
+                finishSidebarPanel(false)
+                return@setOnTouchListener true
+            }
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = event.rawX
                     downY = event.rawY
                     moved = false
                     cancelled = false
+                    showSidebarProgress(0f)
                 }
-                MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> cancelled = true
+                MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                    cancelled = true
+                    finishSidebarPanel(false)
+                }
                 MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP -> {
                     val dx = event.rawX - downX
                     val dy = event.rawY - downY
                     if (abs(dx) > slop || abs(dy) > slop) moved = true
+                    if (event.pointerCount != 1) cancelled = true
+                    if (event.actionMasked == MotionEvent.ACTION_MOVE && !cancelled) {
+                        showSidebarProgress(if (dx > 0 && dx >= 2 * abs(dy))
+                            (dx / (80 * dm.density)).coerceIn(0f, 1f) else 0f)
+                    }
                     if (event.actionMasked == MotionEvent.ACTION_UP && !cancelled) {
-                        if (dx >= 40 * dm.density && dx > abs(dy)) {
-                            InputAccessibilityService.instance?.openClaudeSidebar()
-                        } else if (!moved) {
-                            forwardClaudeTap(view, params, downX, downY)
+                        if (dx >= 80 * dm.density && dx >= 2 * abs(dy)) {
+                            InputAccessibilityService.instance?.completeSidebarSwipe()
+                        } else {
+                            finishSidebarPanel(false)
+                            if (!moved) forwardClaudeTap(view, params, downX, downY)
                         }
                     }
                 }
@@ -342,9 +383,9 @@ class OverlayService : Service() {
         mainHandler.postDelayed({
             if (claudeSwipeView !== view) return@postDelayed
             val service = InputAccessibilityService.instance
-            if (!Settings.canDrawOverlays(this) || !Prefs.isClaudeSwipeEnabled(this)
-                || service?.sidebarForegroundPackage != InputAccessibilityService.CLAUDE_PACKAGE
-                || InputAccessibilityService.currentPackage() != InputAccessibilityService.CLAUDE_PACKAGE
+            if (!Settings.canDrawOverlays(this) || service?.isSidebarTargetActive() != true
+                || service.isSidebarObservationEnabled
+                || InputAccessibilityService.currentPackage() != DebugSidebarTargetReceiver.targetPackage(this)
             ) {
                 removeClaudeSwipeOverlay()
                 return@postDelayed
@@ -365,6 +406,90 @@ class OverlayService : Service() {
     private fun removeClaudeSwipeOverlay() {
         claudeSwipeView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         claudeSwipeView = null
+    }
+
+    /** A trusted accessibility overlay avoids Android 12's untrusted-overlay
+     * touch occlusion rule even with the requested 90%-opaque navy paint. */
+    private fun ensureSidebarPanel(): Boolean {
+        if (sidebarPanelRoot != null) return true
+        val service = InputAccessibilityService.instance ?: return false
+        val manager = service.getSystemService(WindowManager::class.java)
+        val dm = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        manager.defaultDisplay.getRealMetrics(dm)
+        sidebarPanelWidth = (dm.widthPixels * 0.8f).toInt().coerceAtLeast(1)
+        val root = FrameLayout(service).apply {
+            clipChildren = true
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        }
+        val panel = FrameLayout(service).apply {
+            setBackgroundColor(Color.parseColor("#E60A0E1A"))
+            translationX = -sidebarPanelWidth.toFloat()
+        }
+        panel.addView(View(service).apply { setBackgroundColor(Color.parseColor("#F0C040")) },
+            FrameLayout.LayoutParams((2 * dm.density).toInt().coerceAtLeast(1),
+                FrameLayout.LayoutParams.MATCH_PARENT, Gravity.RIGHT))
+        root.addView(panel, FrameLayout.LayoutParams(sidebarPanelWidth, FrameLayout.LayoutParams.MATCH_PARENT))
+        val params = WindowManager.LayoutParams(
+            sidebarPanelWidth, WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.TOP or Gravity.LEFT }
+        return try {
+            manager.addView(root, params)
+            sidebarPanelManager = manager
+            sidebarPanelRoot = root
+            sidebarPanel = panel
+            true
+        } catch (e: Exception) {
+            android.util.Log.w("VIT_SWIPE", "sidebar panel unavailable: ${e.javaClass.simpleName}")
+            false
+        }
+    }
+
+    private fun showSidebarProgress(progress: Float) {
+        if (InputAccessibilityService.instance?.isSidebarTargetActive() != true) return
+        // No window allocation for a tap or a vertical gesture.
+        if (progress <= 0f && sidebarPanel == null) return
+        if (!ensureSidebarPanel()) return
+        sidebarPanelGeneration++
+        sidebarPanel?.apply {
+            animate().cancel()
+            alpha = 1f
+            translationX = -sidebarPanelWidth * (1f - progress.coerceIn(0f, 1f))
+        }
+    }
+
+    private fun finishSidebarPanel(open: Boolean) {
+        if (open && InputAccessibilityService.instance?.isSidebarTargetActive() == true) ensureSidebarPanel()
+        val panel = sidebarPanel ?: return
+        val generation = ++sidebarPanelGeneration
+        panel.animate().cancel()
+        if (open) {
+            panel.alpha = 1f
+            panel.animate().translationX(0f).setDuration(100).setInterpolator(DecelerateInterpolator())
+                .withEndAction {
+                    if (generation == sidebarPanelGeneration) {
+                        panel.animate().alpha(0f).setDuration(150).withEndAction {
+                            if (generation == sidebarPanelGeneration) removeSidebarPanel()
+                        }.start()
+                    }
+                }.start()
+        } else {
+            panel.animate().translationX(-sidebarPanelWidth.toFloat()).setDuration(100)
+                .withEndAction { if (generation == sidebarPanelGeneration) removeSidebarPanel() }.start()
+        }
+    }
+
+    private fun removeSidebarPanel() {
+        sidebarPanelGeneration++
+        sidebarPanel?.animate()?.cancel()
+        sidebarPanelRoot?.let { try { sidebarPanelManager?.removeView(it) } catch (_: Exception) {} }
+        sidebarPanel = null
+        sidebarPanelRoot = null
+        sidebarPanelManager = null
     }
 
     // ==================== 起動ゾーン（既定の起動方法） ====================
@@ -1003,6 +1128,8 @@ class OverlayService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        InputAccessibilityService.instance?.cancelSidebarSwipe()
+        removeSidebarPanel()
         removeClaudeSwipeOverlay()
         updateClaudeSwipeOverlay()
         // 画面回転時に新しい画面サイズを取得して、バーを再配置する
@@ -1058,6 +1185,7 @@ class OverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         sidebarOverlayInstance = null
+        removeSidebarPanel()
         removeClaudeSwipeOverlay()
         mainHandler.removeCallbacksAndMessages(null)
         removeAllViews()

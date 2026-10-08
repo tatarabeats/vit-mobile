@@ -1,6 +1,7 @@
 package com.shunp.vitmobile
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.BroadcastReceiver
 import android.content.ClipboardManager
 import android.content.Context
@@ -10,6 +11,8 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -106,6 +109,7 @@ class InputAccessibilityService : AccessibilityService() {
             }
         }
     }
+    private val debugSidebarReceiver = DebugSidebarTargetReceiver()
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -117,13 +121,26 @@ class InputAccessibilityService : AccessibilityService() {
             registerReceiver(receiver, filter)
         }
         instance = this
-        updateSidebarForeground(currentPackage())
+        if (BuildConfig.DEBUG) {
+            val debugFilter = IntentFilter(DebugSidebarTargetReceiver.ACTION)
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(debugSidebarReceiver, debugFilter, Context.RECEIVER_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                registerReceiver(debugSidebarReceiver, debugFilter)
+            }
+        }
+        configureSidebarObservation()
+        updateSidebarForeground(sidebarWindowPackage())
         OverlayService.refreshClaudeSwipe()
         Log.d(TAG, "service connected")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
         try { unregisterReceiver(receiver) } catch (_: Exception) {}
+        if (BuildConfig.DEBUG) try { unregisterReceiver(debugSidebarReceiver) } catch (_: Exception) {}
+        cancelSidebarSwipe()
+        isSidebarObservationEnabled = false
         instance = null
         OverlayService.refreshClaudeSwipe()
         return super.onUnbind(intent)
@@ -132,11 +149,9 @@ class InputAccessibilityService : AccessibilityService() {
     /** フォーカスイベントを常時監視して、最後にフォーカスされた入力欄を記憶 */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val e = event ?: return
-        if (e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val window = try { windows.firstOrNull { it.id == e.windowId } } catch (_: Exception) { null }
-            if (window == null || window.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
-                updateSidebarForeground(e.packageName?.toString())
-            }
+        if (e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            || e.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            updateSidebarForeground(sidebarWindowPackage())
             return
         }
         if (e.eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED
@@ -158,92 +173,240 @@ class InputAccessibilityService : AccessibilityService() {
         }
     }
 
-    override fun onInterrupt() {}
+    override fun onInterrupt() { cancelSidebarSwipe() }
+
+    var isSidebarObservationEnabled = false
+        private set
+    private val sidebarSwipe by lazy { RightSwipeTracker(80f * resources.displayMetrics.density) }
+    private var sidebarTapInFlight = false
+
+    private fun configureSidebarObservation() {
+        isSidebarObservationEnabled = false
+        if (Build.VERSION.SDK_INT < 35) {
+            sidebarDiag("observation unavailable: API < 35; edge fallback")
+            return
+        }
+        val info = serviceInfo ?: return
+        try {
+            val setter = AccessibilityServiceInfo::class.java.getMethod(
+                "setObservedMotionEventSources", Int::class.javaPrimitiveType!!)
+            val getter = AccessibilityServiceInfo::class.java.getMethod("getObservedMotionEventSources")
+            // This is a hidden @TestApi guarded by a signature permission, not a
+            // public Android 15 API. Never enable consuming touchscreen delivery
+            // while probing an ordinary installation without that permission.
+            check(checkSelfPermission("android.permission.ACCESSIBILITY_MOTION_EVENT_OBSERVING")
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) { "signature permission unavailable" }
+            info.setMotionEventSources(InputDevice.SOURCE_TOUCHSCREEN)
+            // setMotionEventSources clears observed sources, so order matters.
+            setter.invoke(info, InputDevice.SOURCE_TOUCHSCREEN)
+            setServiceInfo(info)
+            val applied = serviceInfo ?: error("service info unavailable")
+            check(applied.motionEventSources == InputDevice.SOURCE_TOUCHSCREEN
+                && getter.invoke(applied) == InputDevice.SOURCE_TOUCHSCREEN) { "observation not retained" }
+            isSidebarObservationEnabled = true
+            sidebarDiag("observation enabled")
+        } catch (e: Exception) {
+            // Clear both fields (the public setter clears the observed field too).
+            // Never publish an info containing only the consuming source mask.
+            info.setMotionEventSources(0)
+            try { setServiceInfo(info) } catch (_: Exception) { disableSelf() }
+            sidebarDiag("observation unavailable: ${e.javaClass.simpleName} ${e.message}; edge fallback")
+        }
+    }
+
+    override fun onMotionEvent(event: MotionEvent) {
+        if (!isSidebarObservationEnabled || sidebarTapInFlight
+            || !event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)) return
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) updateSidebarForeground(sidebarWindowPackage())
+        if (!isSidebarTargetActive()) {
+            cancelSidebarSwipe()
+            return
+        }
+        if (event.pointerCount != 1 || event.actionMasked == MotionEvent.ACTION_CANCEL
+            || event.actionMasked == MotionEvent.ACTION_POINTER_DOWN
+            || event.actionMasked == MotionEvent.ACTION_POINTER_UP) {
+            cancelSidebarSwipe()
+            return
+        }
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                sidebarSwipe.begin(event.rawX, event.rawY)
+                OverlayService.updateSidebarProgress(0f)
+            }
+            MotionEvent.ACTION_MOVE -> OverlayService.updateSidebarProgress(
+                sidebarSwipe.progress(event.rawX, event.rawY))
+            MotionEvent.ACTION_UP -> {
+                if (sidebarSwipe.end(event.rawX, event.rawY)) completeSidebarSwipe()
+                else OverlayService.finishSidebarProgress(false)
+            }
+        }
+    }
+
+    fun cancelSidebarSwipe() {
+        sidebarSwipe.cancel()
+        OverlayService.finishSidebarProgress(false)
+    }
+
+    fun completeSidebarSwipe() {
+        if (!isSidebarTargetActive()) { cancelSidebarSwipe(); return }
+        if (BuildConfig.DEBUG) Log.i("VIT_SWIPE", "detected")
+        OverlayService.finishSidebarProgress(true)
+        openClaudeSidebar()
+    }
+
+    fun isSidebarTargetActive(): Boolean = Prefs.isClaudeSwipeEnabled(this)
+        && sidebarForegroundPackage == DebugSidebarTargetReceiver.targetPackage(this)
+
+    private fun sidebarWindowPackage(): String? = try {
+        // Do not reuse findAppRoot(): it deliberately skips VIT/system windows
+        // for voice insertion, which could leave Claude stale behind another UI.
+        val window = windows.firstOrNull { it.isFocused
+            && it.type != AccessibilityWindowInfo.TYPE_INPUT_METHOD
+            && it.type != AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY }
+        if (window != null) window.root?.packageName?.toString()
+        else rootInActiveWindow?.packageName?.toString()
+    } catch (_: Exception) { null }
+
+    private fun sidebarDiag(message: String) {
+        diag("sidebar: $message")
+        if (BuildConfig.DEBUG) Log.i("VIT_SWIPE", "sidebar $message")
+    }
 
     /** サイドバー専用。既存の入力先・録音用 currentPackage() の判定は変えない。 */
     var sidebarForegroundPackage: String? = null
         private set
 
     private fun updateSidebarForeground(pkg: String?) {
-        if (pkg.isNullOrBlank() || pkg == packageName || pkg == "android"
-            || pkg == "com.android.systemui" || pkg.startsWith("com.android.systemui.")
-            || pkg == "com.android.permissioncontroller"
-            || pkg == "com.google.android.permissioncontroller"
-        ) return
-        // windowId が取得できない IME イベントも除外する（キーボード名の固定リストにしない）。
-        val ime = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
-        val isIme = try { ime.enabledInputMethodList.any { it.packageName == pkg } } catch (_: Exception) { false }
-        if (isIme) return
         if (sidebarForegroundPackage == pkg) return
         sidebarForegroundPackage = pkg
+        cancelSidebarSwipe()
         OverlayService.refreshClaudeSwipe()
     }
 
-    /** ラベルのある左上のボタンを優先し、座標タップは最後の手段にする。 */
-    fun openClaudeSidebar() {
-        if (!android.provider.Settings.canDrawOverlays(this)
-            || !Prefs.isClaudeSwipeEnabled(this) || sidebarForegroundPackage != CLAUDE_PACKAGE
-        ) {
-            diag("sidebar: skipped (no permission, disabled or not Claude)")
-            return
+    /** Return value means click accepted / tap dispatched, not proof the drawer opened. */
+    fun openClaudeSidebar(): Boolean {
+        updateSidebarForeground(sidebarWindowPackage())
+        if (!isSidebarTargetActive()) {
+            sidebarDiag("skipped (disabled or target not foreground)")
+            return false
         }
+        val ownedNodes = mutableListOf<AccessibilityNodeInfo>()
         try {
-            val root = findAppRoot()
-            if (root == null || root.packageName?.toString() != CLAUDE_PACKAGE) {
-                diag("sidebar: skipped (Claude window unavailable)")
-                return
+            val root = windows.firstOrNull {
+                it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.isFocused
+            }?.root ?: rootInActiveWindow
+            if (root == null) {
+                sidebarDiag("skipped (target window unavailable)")
+                return false
+            }
+            ownedNodes.add(root)
+            if (root.packageName?.toString() != DebugSidebarTargetReceiver.targetPackage(this)) {
+                sidebarDiag("skipped (target window changed)")
+                return false
             }
             val dm = android.util.DisplayMetrics()
             @Suppress("DEPRECATION")
             getSystemService(android.view.WindowManager::class.java).defaultDisplay.getRealMetrics(dm)
-            val keywords = listOf("sidebar", "menu", "drawer", "navigation", "サイドバー", "メニュー", "チャット一覧", "open")
-            fun inTopLeft(node: AccessibilityNodeInfo): Boolean {
-                val r = Rect()
-                node.getBoundsInScreen(r)
+            val keywords = listOf("sidebar", "menu", "drawer", "navigation", "chats", "history",
+                "サイドバー", "メニュー", "チャット", "履歴")
+            fun rect(node: AccessibilityNodeInfo) = Rect().also { node.getBoundsInScreen(it) }
+            fun inTop(node: AccessibilityNodeInfo): Boolean {
+                val r = rect(node)
                 return node.isVisibleToUser && node.isEnabled && !r.isEmpty
-                    && r.centerX() >= 0 && r.centerX() < dm.widthPixels / 2
                     && r.centerY() >= 0 && r.centerY() < dm.heightPixels * 0.2f
             }
-            fun findButton(node: AccessibilityNodeInfo, depth: Int = 0): AccessibilityNodeInfo? {
-                if (depth > 60) return null
-                val labels = listOf(node.contentDescription?.toString(), node.text?.toString(), node.viewIdResourceName)
-                if (inTopLeft(node) && labels.any { label ->
-                        label != null && keywords.any { label.contains(it, ignoreCase = true) }
-                    }) {
-                    var target: AccessibilityNodeInfo? = node
-                    repeat(5) {
-                        val candidate = target ?: return@repeat
-                        if (candidate.isClickable && inTopLeft(candidate)) return candidate
-                        target = candidate.parent
-                    }
+            fun inLeft(node: AccessibilityNodeInfo): Boolean {
+                val r = rect(node)
+                return inTop(node) && r.centerX() >= 0 && r.centerX() < dm.widthPixels / 2
+            }
+            fun label(value: CharSequence?): String = value?.toString()
+                ?.replace('\n', ' ')?.replace('\r', ' ') ?: ""
+            fun describe(node: AccessibilityNodeInfo): String =
+                "desc=${label(node.contentDescription)} text=${label(node.text)} id=${label(node.viewIdResourceName)} rect=${rect(node)}"
+            val topClickables = mutableListOf<AccessibilityNodeInfo>()
+            val named = linkedMapOf<AccessibilityNodeInfo, String>()
+            fun walk(node: AccessibilityNodeInfo, ancestors: List<AccessibilityNodeInfo>, depth: Int) {
+                if (depth > 60) return
+                if (node.isClickable && inTop(node)) topClickables.add(node)
+                if (inLeft(node) && listOf(node.contentDescription, node.text, node.viewIdResourceName)
+                    .any { label -> label != null && keywords.any { label.contains(it, ignoreCase = true) } }) {
+                    val target = (listOf(node) + ancestors.asReversed().take(5))
+                        .firstOrNull { it.isClickable && inLeft(it) }
+                    if (target != null) named[target] = describe(node)
                 }
                 for (i in 0 until node.childCount) {
                     val child = node.getChild(i) ?: continue
-                    findButton(child, depth + 1)?.let { return it }
+                    ownedNodes.add(child)
+                    walk(child, ancestors + node, depth + 1)
                 }
-                return null
             }
-            val button = findButton(root)
-            if (button != null) {
-                val bounds = Rect()
-                button.getBoundsInScreen(bounds)
-                val clicked = try { button.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) { false }
-                if (clicked) {
-                    diag("sidebar: ACTION_CLICK rect=$bounds")
-                } else {
-                    val dispatched = tapAt(bounds.exactCenterX(), bounds.exactCenterY())
-                    diag("sidebar: button tap dispatched=$dispatched rect=$bounds")
-                }
+            walk(root, emptyList(), 0)
+            val orderedNamed = named.keys.sortedWith(compareBy({ rect(it).left }, { rect(it).top }))
+            for (candidate in orderedNamed) {
+                sidebarDiag("candidate named ${describe(candidate)} matched=${named[candidate]}")
+                val clicked = try { candidate.performAction(AccessibilityNodeInfo.ACTION_CLICK) }
+                    catch (_: Exception) { false }
+                sidebarDiag("ACTION_CLICK named accepted=$clicked")
+                if (clicked) return true
+            }
+            if (named.isEmpty()) {
+                sidebarDiag("no named candidate; top clickables=${topClickables.size}")
+                topClickables.forEach { sidebarDiag("top ${describe(it)}") }
+            }
+            // Small unlabelled toolbar controls near the physical left edge only.
+            val positional = topClickables.filter {
+                val r = rect(it)
+                inLeft(it) && r.left >= 0 && r.left < dm.widthPixels * 0.25f
+                    && r.width() < dm.widthPixels * 0.25f && !named.containsKey(it)
+            }.minWithOrNull(compareBy({ rect(it).left }, { rect(it).top }))
+            if (positional != null) {
+                sidebarDiag("candidate positional ${describe(positional)}")
+                val clicked = try { positional.performAction(AccessibilityNodeInfo.ACTION_CLICK) }
+                    catch (_: Exception) { false }
+                sidebarDiag("ACTION_CLICK positional accepted=$clicked")
+                if (clicked) return true
             } else {
-                val statusId = resources.getIdentifier("status_bar_height", "dimen", "android")
-                val statusHeight = if (statusId != 0) resources.getDimensionPixelSize(statusId) else (24 * dm.density).toInt()
-                val x = 28 * dm.density
-                val y = statusHeight + 28 * dm.density
-                val dispatched = tapAt(x, y)
-                diag("sidebar: fallback tap dispatched=$dispatched x=$x y=$y")
+                sidebarDiag("no positional candidate")
             }
+            val statusId = resources.getIdentifier("status_bar_height", "dimen", "android")
+            val statusHeight = if (statusId != 0) resources.getDimensionPixelSize(statusId)
+                else (24 * dm.density).toInt()
+            val x = 28 * dm.density
+            val y = statusHeight + 28 * dm.density
+            val dispatched = tapSidebarAt(x, y)
+            sidebarDiag("fallback tap dispatched=$dispatched x=$x y=$y")
+            return dispatched
         } catch (e: Exception) {
-            diag("sidebar: failed ${e.javaClass.simpleName}")
+            sidebarDiag("failed ${e.javaClass.simpleName}")
+            return false
+        } finally {
+            @Suppress("DEPRECATION")
+            ownedNodes.forEach { it.recycle() }
+        }
+    }
+
+    private fun tapSidebarAt(x: Float, y: Float): Boolean {
+        // Our injected tap is observable too. It must not reset the panel's
+        // completion animation as though the user had started a second gesture.
+        sidebarTapInFlight = true
+        return try {
+            val path = android.graphics.Path().apply { moveTo(x, y) }
+            val gesture = android.accessibilityservice.GestureDescription.Builder()
+                .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 60))
+                .build()
+            val accepted = dispatchGesture(gesture, object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: android.accessibilityservice.GestureDescription) {
+                    sidebarTapInFlight = false
+                }
+                override fun onCancelled(gestureDescription: android.accessibilityservice.GestureDescription) {
+                    sidebarTapInFlight = false
+                }
+            }, null)
+            if (!accepted) sidebarTapInFlight = false
+            accepted
+        } catch (_: Exception) {
+            sidebarTapInFlight = false
+            false
         }
     }
 

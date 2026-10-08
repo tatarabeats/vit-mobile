@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Hidden signature permission: ordinary installs fall back to the edge strip. -->
+    <uses-permission android:name="android.permission.ACCESSIBILITY_MOTION_EVENT_OBSERVING"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -83,6 +86,14 @@
             android:exported="false"
             android:foregroundServiceType="microphone"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+
+        <receiver
+            android:name=".DebugSidebarTargetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.shunp.vitmobile.DEBUG_SIDEBAR_TARGET" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".BootReceiver"
