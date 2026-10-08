@@ -114,7 +114,8 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                     if (lifted && slots.values.none { it.active }) {
                         val ok = time - startTime in 0L..700L
                             && dx >= display.width * 0.12f
-                            && dx >= maxAbsDy * 3
+                            // 実測: 素早い右スワイプ dx=198/maxDy=69、上下スクロール dx=73/maxDy=302（2026-10-08）
+                            && dx >= maxAbsDy * 2.5f
                             && maxAbsDy < display.height * 0.06f
                             && minDx > -display.width * 0.03f
                             && (lastFire == null || time - lastFire!! >= 800)
