@@ -132,12 +132,6 @@
                     <TextView style="@style/Vit.Note" android:text="アイコンの長押しで一覧から外せます"/>
                 </LinearLayout>
                 <LinearLayout style="@style/Vit.Card">
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/claudeSwipeSwitch"
-                        style="@style/Vit.Switch"
-                        android:text="Claude で右スワイプしてスレッド一覧"/>
-                </LinearLayout>
-                <LinearLayout style="@style/Vit.Card">
                     <TextView
                         style="@style/Vit.CardTitle"
                         android:text="除外アプリ"

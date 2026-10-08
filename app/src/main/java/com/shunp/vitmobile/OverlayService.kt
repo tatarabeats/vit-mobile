@@ -297,7 +297,9 @@ class OverlayService : Service() {
             service?.cancelSidebarSwipe()
             removeSidebarPanel()
         }
-        val shouldShow = Settings.canDrawOverlays(this) && targetActive
+        // 左端の帯は出さない（2026-10-08 駿平さん「金の表示はいらない。こんなんだったらない方がいい」）。
+        // 画面のどこでも右スワイプを見る仕組みは Android の signature 権限が要り、普通のアプリでは使えない
+        val shouldShow = false && Settings.canDrawOverlays(this) && targetActive
             && service?.isSidebarObservationEnabled != true
         if (!shouldShow) {
             removeClaudeSwipeOverlay()

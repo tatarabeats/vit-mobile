@@ -51,11 +51,6 @@ class MainActivity : AppCompatActivity() {
         b.autoEnterSwitch.isChecked = Prefs.isAutoEnterEnabled(this)
         b.autoEnterSwitch.setOnCheckedChangeListener { _, checked -> Prefs.setAutoEnterEnabled(this, checked) }
 
-        b.claudeSwipeSwitch.isChecked = Prefs.isClaudeSwipeEnabled(this)
-        b.claudeSwipeSwitch.setOnCheckedChangeListener { _, checked ->
-            Prefs.setClaudeSwipeEnabled(this, checked)
-            OverlayService.refreshClaudeSwipe()
-        }
 
         // ---- アプリの一覧（自動送信・除外とも同じ選択画面） ----
         b.pickAutoEnter.setOnClickListener {
