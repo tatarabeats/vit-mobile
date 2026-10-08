@@ -309,7 +309,8 @@ class OverlayService : Service() {
         wm.defaultDisplay.getRealMetrics(dm)
         val height = (200 * dm.density).toInt().coerceAtMost(dm.heightPixels)
         val params = WindowManager.LayoutParams(
-            (18 * dm.density).toInt(), height,
+            // 指の腹で端から始めても乗るよう 28dp（2026-10-08、18dp だと外れやすかった）
+            (28 * dm.density).toInt(), height,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
@@ -324,7 +325,11 @@ class OverlayService : Service() {
             y = (dm.heightPixels * 0.58f).toInt().coerceAtMost(dm.heightPixels - height)
         }
         val view = View(this).apply {
-            setBackgroundColor(Color.TRANSPARENT)
+            // どこを右へなぞればいいか目で分かるよう、左端にうっすら金色の光を出す
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(0x66F0C040, 0x00F0C040)
+            )
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         view.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
