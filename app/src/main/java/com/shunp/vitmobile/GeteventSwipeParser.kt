@@ -45,6 +45,9 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
     private var startY: Float? = null
     private var maxAbsDy = 0f
     private var minDx = 0f
+    private var maxDx = 0f
+    /** 直前に成立した向き。1=右（開く）、-1=左（閉じる） */
+    var lastDirection = 0
     /** 直前の1回のなぞりの縦横の動き（記録用） */
     var lastGesture: String? = null
     private var startDisplay: SwipeDisplay? = null
@@ -105,22 +108,39 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         .toFloat() / device.maxX * display.width
                     val y = (if (display.rotation == 2) device.maxY - rawY else rawY)
                         .toFloat() / device.maxY * display.height
-                    if (startX == null) { startX = x; startY = y; maxAbsDy = 0f; minDx = 0f }
+                    if (startX == null) { startX = x; startY = y; maxAbsDy = 0f; minDx = 0f; maxDx = 0f }
                     val dx = x - startX!!
                     val dy = y - startY!!
                     // 途中の縦の動きも見る。上下スクロールの最後に指が右へ流れただけで開いていた（2026-10-08）
                     if (abs(dy) > maxAbsDy) maxAbsDy = abs(dy)
                     if (dx < minDx) minDx = dx
-                    if (lifted && slots.values.none { it.active }) {
+                    if (dx > maxDx) maxDx = dx
+                    val elapsed = time - startTime
+                    val cooled = lastFire == null || time - lastFire!! >= 800
+                    // なぞっている途中で横向きと分かった瞬間に決める。指を離すまで待つと、
+                    // その間の縦の揺れで Claude のチャットが動いてしまう（2026-10-08 駿平さん）
+                    val early = !lifted && elapsed in 0L..450L && cooled
+                        && abs(dx) >= display.width * 0.08f
+                        && abs(dx) >= maxAbsDy * 2.5f
+                        && maxAbsDy < display.height * 0.04f
+                        && (if (dx > 0) minDx > -display.width * 0.03f else maxDx < display.width * 0.03f)
+                    if (early) {
+                        lastGesture = "early dx=${dx.toInt()} maxDy=${maxAbsDy.toInt()} ms=$elapsed"
+                        lastDirection = if (dx > 0) 1 else -1
+                        detected = true
+                        lastFire = time
+                        blocked = true
+                    } else if (lifted && slots.values.none { it.active }) {
                         val ok = time - startTime in 0L..700L
-                            && dx >= display.width * 0.12f
+                            && abs(dx) >= display.width * 0.12f
                             // 実測: 素早い右スワイプ dx=198/maxDy=69、上下スクロール dx=73/maxDy=302（2026-10-08）
-                            && dx >= maxAbsDy * 2.5f
+                            && abs(dx) >= maxAbsDy * 2.5f
                             && maxAbsDy < display.height * 0.06f
-                            && minDx > -display.width * 0.03f
+                            && (if (dx > 0) minDx > -display.width * 0.03f else maxDx < display.width * 0.03f)
                             && (lastFire == null || time - lastFire!! >= 800)
                         lastGesture = "dx=${dx.toInt()} maxDy=${maxAbsDy.toInt()} ms=${time - startTime} ok=$ok"
                         if (ok) {
+                            lastDirection = if (dx > 0) 1 else -1
                             detected = true
                             lastFire = time
                             blocked = true
