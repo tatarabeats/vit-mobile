@@ -123,17 +123,11 @@ class MainActivity : AppCompatActivity() {
         b.btnUpdate.text = "更新を確認（v" + BuildInfo.versionName(this) + "）"
         b.btnUpdate.setOnClickListener { Updater.checkNow(this) }
 
-        // 開いた時に自動で確認する（通知を切っていても気づけるように）
-        Updater.checkOnOpen(this)
-
-        // 更新通知から来た時は、そのまま取得からインストールまで進める
+        // 通知経由も通常起動も同じ更新処理。URLはGitHubから取得する。
         if (intent?.action == ACTION_RUN_UPDATE) {
-            val url = intent.getStringExtra("url")
-            val ver = intent.getStringExtra("version") ?: ""
-            if (!url.isNullOrBlank()) {
-                Toast.makeText(this, ver + " を取得中…", Toast.LENGTH_SHORT).show()
-                Updater.download(this, Updater.Release(ver, url))
-            }
+            Updater.checkNow(this)
+        } else {
+            Updater.checkOnOpen(this)
         }
 
         if (!hasMic()) requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1)
@@ -141,6 +135,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        Updater.resumeAfterPermission(this)
         showAppLists()
         showRecentHistory()
         showDiagSummary()

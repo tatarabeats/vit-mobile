@@ -118,6 +118,12 @@ class OverlayService : Service() {
     private var lastMicY = 0  // 収納時の高さを保持
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val updateCheck = object : Runnable {
+        override fun run() {
+            Updater.checkAndNotify(this@OverlayService)
+            mainHandler.postDelayed(this, Updater.CHECK_INTERVAL_MS)
+        }
+    }
 
     private val gold = Color.parseColor("#FFF0C040")
     private val navy = Color.parseColor("#FF0A0E1A")
@@ -132,6 +138,7 @@ class OverlayService : Service() {
         updateClaudeSwipeOverlay()
         recorder = VoiceRecorder(this)
         recorder?.recoverPending()
+        mainHandler.post(updateCheck)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -312,7 +319,9 @@ class OverlayService : Service() {
             // START では RTL 言語で右端になるため、物理的な左端を指定する。
             gravity = Gravity.TOP or Gravity.LEFT
             x = 0
-            y = (dm.heightPixels * 0.4f).toInt().coerceAtMost(dm.heightPixels - height)
+            // One Hand Operation+ の左端の受け口（実測で上から 28%〜56%）と重ならないよう、その下に置く。
+            // 重なると右スワイプが「戻る」に取られる（Galaxy S24 で確認・2026-10-08）
+            y = (dm.heightPixels * 0.58f).toInt().coerceAtMost(dm.heightPixels - height)
         }
         val view = View(this).apply {
             setBackgroundColor(Color.TRANSPARENT)
@@ -1190,5 +1199,6 @@ class OverlayService : Service() {
         mainHandler.removeCallbacksAndMessages(null)
         removeAllViews()
         recorder?.release()
+        isRecording = false
     }
 }
