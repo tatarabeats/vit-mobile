@@ -240,12 +240,13 @@ class GeteventSwipeParserTest {
         assertFalse(s.up())
     }
 
-    @Test fun holdingAfterCrossingThresholdTimesOut() {
+    @Test fun slowHoldWithoutEarlyDecisionTimesOutOnLift() {
+        // 途中判定の窓（450ms）を過ぎてから横に動かし、長く止めて離した場合は開かない
         val s = Stream(device)
         s.down()
-        s.time += 100
+        s.time += 460
         assertFalse(s.move(1800))
-        s.time += 601
+        s.time += 300
         assertFalse(s.up())
     }
 
@@ -260,8 +261,11 @@ class GeteventSwipeParserTest {
     @Test fun differentAxisRangesStillUseTwelvePercentOfWidth() {
         val s = Stream(TouchDevice("/dev/input/event9", "touchscreen", 8191, 16383))
         s.down()
+        s.time += 500 // 途中判定の窓を外して、離した時の 12% だけを見る
         assertFalse(s.finish(1982))
+        s.time += 1000
         s.down()
+        s.time += 500
         assertTrue(s.finish(1983))
     }
 
