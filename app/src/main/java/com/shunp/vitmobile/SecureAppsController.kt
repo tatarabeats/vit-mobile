@@ -17,10 +17,31 @@ internal class SecureAppsController private constructor(context: Context) : Secu
     private val context = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private val machine = SecureAppMode(this, Prefs.getSecureAppState(this.context))
-    private val received = Shizuku.OnBinderReceivedListener { main.post { machine.binderReceived() } }
+    private val received = Shizuku.OnBinderReceivedListener {
+        main.post { reviveAttempts = 0; machine.binderReceived() }
+    }
+
+    // Shizuku のウォッチドッグは切ってある（カードアプリ用にデバッグを切った瞬間を「異常停止」と見て
+    // デバッグをオンに戻してしまうため・2026-10-09）。代わりに、カードアプリを使っていない時に
+    // Shizuku が落ちたら VIT が起動し直す。
+    private var reviveAttempts = 0
+    private val dead = Shizuku.OnBinderDeadListener { main.post { scheduleRevive(5_000) } }
+
+    private fun scheduleRevive(delay: Long) {
+        main.postDelayed({
+            if (Shizuku.pingBinder()) { reviveAttempts = 0; return@postDelayed }
+            if (machine.state != null) return@postDelayed // カードアプリ中・切り替え中は触らない
+            if (reviveAttempts >= 5) { log("revive gave up"); return@postDelayed }
+            reviveAttempts++
+            log("revive Shizuku attempt=$reviveAttempts")
+            broadcast(true)
+            scheduleRevive(30_000)
+        }, delay)
+    }
 
     init {
         Shizuku.addBinderReceivedListenerSticky(received)
+        Shizuku.addBinderDeadListener(dead)
         if (machine.state != null) log("recovery pending phase=${machine.state?.phase}")
     }
 
