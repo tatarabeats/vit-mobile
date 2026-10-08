@@ -151,6 +151,26 @@
                         android:text="アプリを選ぶ"/>
                     <TextView style="@style/Vit.Note" android:text="アイコンの長押しで一覧から外せます"/>
                 </LinearLayout>
+                <LinearLayout style="@style/Vit.Card">
+                    <TextView
+                        style="@style/Vit.CardTitle"
+                        android:text="デバッグを切るアプリ"
+                        android:drawableStart="@drawable/ic_main_block"/>
+                    <TextView style="@style/Vit.Note" android:text="使用中は開発者向けオプションとデバッグをオフにし、別のアプリへ移ると元に戻します"/>
+                    <GridLayout
+                        android:id="@+id/secureApps"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/field_bg"
+                        android:padding="8dp"
+                        android:minHeight="56dp"/>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/pickSecureApps"
+                        style="@style/Vit.Button"
+                        android:text="アプリを選ぶ"/>
+                    <TextView style="@style/Vit.Note" android:text="アイコンの長押しで一覧から外せます"/>
+                </LinearLayout>
             </LinearLayout>
         </ScrollView>
         <ScrollView

@@ -17,6 +17,16 @@ class ShizukuTouchService : IShizukuTouchService.Stub() {
 
     override fun getLastInstallOutput(): String = installOutput
 
+    override fun runShell(cmd: String): Int {
+        // No arbitrary shell/interpolation: only this app's one-time settings grant.
+        require(Regex("pm grant --user [0-9]+ com\\.shunp\\.vitmobile android\\.permission\\.WRITE_SECURE_SETTINGS").matches(cmd))
+        val child = ProcessBuilder(listOf("/system/bin/pm") + cmd.split(' ').drop(1))
+            .redirectErrorStream(true).redirectOutput(java.io.File("/dev/null")).start()
+        return try {
+            if (child.waitFor(10, TimeUnit.SECONDS)) child.exitValue() else -1
+        } finally { child.destroyForcibly() }
+    }
+
     // Separate lock/process: installing must not stop or hold the getevent lifecycle lock.
     override fun installApk(apk: ParcelFileDescriptor, size: Long): Int = synchronized(installLock) {
         installOutput = ""

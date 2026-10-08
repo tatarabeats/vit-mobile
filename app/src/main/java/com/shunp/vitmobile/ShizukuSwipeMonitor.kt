@@ -26,7 +26,7 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
     private val power = owner.getSystemService(PowerManager::class.java)
     private val displays = owner.getSystemService(DisplayManager::class.java)
     private val args = Shizuku.UserServiceArgs(ComponentName(owner, ShizukuTouchService::class.java))
-        .daemon(false).processNameSuffix("sidebar_touch").debuggable(BuildConfig.DEBUG).version(1)
+        .daemon(false).processNameSuffix("sidebar_touch").debuggable(BuildConfig.DEBUG).version(2)
     private var active = false
     private var screenOn = false
     private var session: Session? = null
@@ -108,6 +108,11 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
 
     fun refresh() {
         if (!active) return
+        if (SecureAppsController.get(owner).blocksShizuku) {
+            main.removeCallbacks(retry)
+            stopSession("secure app")
+            return
+        }
         val allowed = try {
             Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         } catch (_: Exception) { false }
@@ -193,6 +198,9 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
             this.remote = remote
             thread(name = "vit-shizuku-swipe", isDaemon = true) {
                 try {
+                    SecureAppsController.grantPermission(owner, remote)
+                    main.post { SecureAppsController.get(owner).permissionAvailable() }
+                    if (cancelled) return@thread
                     val listing = readPipe(remote.listDevices()) { it.readText() } ?: return@thread
                     val device = TouchDeviceDiscovery.parse(listing)
                         ?: error("touchscreen with zero-based MT X/Y axes unavailable")

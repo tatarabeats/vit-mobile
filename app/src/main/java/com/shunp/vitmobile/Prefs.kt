@@ -20,6 +20,86 @@ object Prefs {
     private const val KEY_AUTO_ENTER = "auto_enter_packages"
     private const val KEY_AUTO_ENTER_ON = "auto_enter_enabled"
     private const val KEY_CLAUDE_SWIPE = "claude_sidebar_swipe"
+    private const val KEY_SECURE_APPS = "secure_app_packages"
+    private const val KEY_SECURE_STATE = "secure_app_state"
+
+    // Verified Google Play IDs (2026-10-08); see docs/secure-apps.md for sources.
+    // Olive uses the SMBC/Vpass apps; PayPay Card uses the PayPay app.
+    private val DEFAULT_SECURE_APPS = listOf(
+        "com.smbc_card.vpass", // 三井住友カード Vpass
+        "jp.co.smbc.direct", // 三井住友銀行 / Olive
+        "jp.co.rakuten.kc.rakutencardapp.android", // 楽天カード
+        "jp.co.rakuten_bank.rakutenbank", // 楽天銀行
+        "jp.ne.paypay.android.app", // PayPay / PayPayカード
+        "jp.co.japannetbank.smtapp.balance", // PayPay銀行
+        "jp.co.jcb.my", // MyJCB
+        "jp.co.saisoncard.android.saisonportal", // セゾンPortal
+        "jp.co.eposcard.epossupportapp", // エポス
+        "jp.co.aeon.credit.android.wallet", // イオンウォレット / AEON Pay
+        "com.nttdocomo.dcard", // dカード
+        "jp.auone.wallet", // au PAY
+        "jp.mufg.bk.applisp.app", // 三菱UFJ銀行
+        "jp.co.mizuhobank.banking", // みずほ銀行
+        "jp.co.resona_gr.ss.SmartApp", // りそなグループ
+        "jp.japanpost.jp_bank.bankbookapp", // ゆうちょ通帳
+        "jp.japanpost.jp_bank.FIDOapp", // ゆうちょ認証
+        "jp.co.netbk", // 住信SBIネット銀行
+        "net.moneykit.SonyBankApp", // ソニー銀行
+        "jp.co.sbisec.hyperkabu2", // SBI証券 株
+        "jp.co.rakuten_sec.ispeed", // 楽天証券 iSPEED
+        "jp.co.mobileit.ispeed_fx", // 楽天証券 iSPEED FX
+        "jp.co.monex.comprehensive", // マネックス証券
+        "com.google.android.apps.walletnfcrel", // Google Wallet
+        "jp.co.rakuten.pay", // 楽天ペイ
+        "com.nttdocomo.keitai.payment", // d払い
+        "jp.co.jibunbank.jibunmain", // auじぶん銀行
+        "jp.co.sevenbank.appMysevenbank", // Myセブン銀行
+        "jp.co.aeonbank.android.passbook", // イオン銀行
+        "jp.co.rakuten_bank.sapp_jre", // JRE BANK
+        "com.MinnaNoGinko.bankapp", // みんなの銀行
+        "jp.mufg.cr.app6", // NICOSカード
+        "jp.mufg.cr.app4", // MDC
+        "com.smbc_card.vpoint", // VポイントPay
+        "jp.mufg.cr.fam.brand.app1", // グローバルポイント Wallet
+    ).joinToString("\n")
+
+    fun getSecureAppPackages(ctx: Context): String =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_SECURE_APPS, DEFAULT_SECURE_APPS) ?: DEFAULT_SECURE_APPS
+
+    fun setSecureAppPackages(ctx: Context, text: String) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(KEY_SECURE_APPS, text).apply()
+    }
+
+    fun isSecureApp(ctx: Context, pkg: String): Boolean = getSecureAppPackages(ctx)
+        .lineSequence().any { it.trim().equals(pkg, ignoreCase = true) }
+
+    internal fun getSecureAppState(ctx: Context): SecureAppState? {
+        val raw = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_SECURE_STATE, null) ?: return null
+        return try {
+            val json = JSONObject(raw)
+            SecureAppState(
+                DebugSettings(json.getInt("development"), json.getInt("usb"), json.getInt("wifi")),
+                json.getString("phase"), json.optInt("attempts"), json.optLong("retryAt"),
+            )
+        } catch (e: Exception) {
+            // Do not crash accessibility or guess which switches were enabled.
+            SecureAppsController.log(ctx, "invalid recovery journal ${e.javaClass.simpleName}; original settings unknown")
+            null
+        }
+    }
+
+    /** Synchronous commit: no STOP/settings writes until the recovery journal is on disk. */
+    internal fun setSecureAppState(ctx: Context, state: SecureAppState?): Boolean {
+        val edit = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        if (state == null) edit.remove(KEY_SECURE_STATE)
+        else edit.putString(KEY_SECURE_STATE, JSONObject()
+            .put("development", state.original.development).put("usb", state.original.usb)
+            .put("wifi", state.original.wifi).put("phase", state.phase)
+            .put("attempts", state.startAttempts).put("retryAt", state.retryAt).toString())
+        return edit.commit()
+    }
 
     fun isClaudeSwipeEnabled(ctx: Context): Boolean =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

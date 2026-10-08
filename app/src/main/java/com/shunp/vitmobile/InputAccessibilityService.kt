@@ -111,6 +111,15 @@ class InputAccessibilityService : AccessibilityService() {
     }
     private val debugSidebarReceiver = DebugSidebarTargetReceiver()
     private var shizukuSwipe: ShizukuSwipeMonitor? = null
+    private val secureApps by lazy { SecureAppsController.get(this) }
+    private val recoverSecureForeground = object : Runnable {
+        override fun run() {
+            if (instance !== this@InputAccessibilityService) return
+            observeSecureForeground()
+            // Also recover when the first window tree is unavailable during reconnection.
+            handler.postDelayed(this, 1_000)
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -133,6 +142,8 @@ class InputAccessibilityService : AccessibilityService() {
         }
         configureSidebarObservation()
         updateSidebarForeground(sidebarWindowPackage())
+        handler.removeCallbacks(recoverSecureForeground)
+        recoverSecureForeground.run()
         if (shizukuSwipe == null) {
             shizukuSwipe = ShizukuSwipeMonitor(this).also { it.start() }
         }
@@ -141,6 +152,8 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        handler.removeCallbacks(recoverSecureForeground)
+        secureApps.observerStopped()
         shizukuSwipe?.close()
         shizukuSwipe = null
         try { unregisterReceiver(receiver) } catch (_: Exception) {}
@@ -153,6 +166,8 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(recoverSecureForeground)
+        if (instance === this) secureApps.observerStopped()
         shizukuSwipe?.close()
         shizukuSwipe = null
         if (instance === this) instance = null
@@ -172,6 +187,7 @@ class InputAccessibilityService : AccessibilityService() {
         if (e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             || e.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             updateSidebarForeground(sidebarWindowPackage())
+            observeSecureForeground(e.packageName?.toString(), e.windowId)
             return
         }
         if (e.eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED
@@ -286,6 +302,29 @@ class InputAccessibilityService : AccessibilityService() {
         if (window != null) window.root?.packageName?.toString()
         else rootInActiveWindow?.packageName?.toString()
     } catch (_: Exception) { null }
+
+    @Suppress("DEPRECATION")
+    private fun observeSecureForeground(eventPackage: String? = null, eventWindowId: Int = -1) {
+        // A focused system window/keyboard must not become a "normal app" exit.
+        val pkg = try {
+            val focused = windows.firstOrNull { it.isFocused }
+            if (focused != null) {
+                if (focused.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
+                    val root = focused.root
+                    try {
+                        // Some financial apps do not expose their node tree. The
+                        // event is safe to use only for this focused app window.
+                        if (focused.id == eventWindowId && eventPackage != null) eventPackage
+                        else root?.packageName?.toString()
+                    } finally { root?.recycle() }
+                } else null
+            } else {
+                val root = rootInActiveWindow
+                try { root?.packageName?.toString() } finally { root?.recycle() }
+            }
+        } catch (_: Exception) { null }
+        secureApps.foreground(pkg)
+    }
 
     private fun sidebarDiag(message: String) {
         diag("sidebar: $message")

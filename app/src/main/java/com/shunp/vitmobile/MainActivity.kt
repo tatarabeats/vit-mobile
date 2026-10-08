@@ -64,11 +64,18 @@ class MainActivity : AppCompatActivity() {
                 Prefs.setExcludedPackages(this, it); showAppLists()
             }
         }
+        b.pickSecureApps.setOnClickListener {
+            pickApps("デバッグを切るアプリ", { Prefs.getSecureAppPackages(this) }) {
+                Prefs.setSecureAppPackages(this, it); showAppLists()
+            }
+        }
         // タップは選択画面、長押しはそのアプリを一覧から外す。
         b.autoEnterApps.tag = Runnable { b.pickAutoEnter.performClick() }
         b.excludedApps.tag = Runnable { b.pickExcluded.performClick() }
         b.autoEnterApps.setOnClickListener { b.pickAutoEnter.performClick() }
         b.excludedApps.setOnClickListener { b.pickExcluded.performClick() }
+        b.secureApps.tag = Runnable { b.pickSecureApps.performClick() }
+        b.secureApps.setOnClickListener { b.pickSecureApps.performClick() }
 
         b.btnHistory.setOnClickListener { startActivity(Intent(this, HistoryActivity::class.java)) }
 
@@ -131,6 +138,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        SecureAppsController.get(this).activityStarted()
         shizukuPermission.start()
     }
 
@@ -288,6 +296,10 @@ class MainActivity : AppCompatActivity() {
         }
         renderIcons(b.excludedApps, parseList(Prefs.getExcludedPackages(this))) { pkg ->
             Prefs.setExcludedPackages(this, parseList(Prefs.getExcludedPackages(this))
+                .filterNot { it.equals(pkg, ignoreCase = true) }.joinToString("\n"))
+        }
+        renderIcons(b.secureApps, parseList(Prefs.getSecureAppPackages(this))) { pkg ->
+            Prefs.setSecureAppPackages(this, parseList(Prefs.getSecureAppPackages(this))
                 .filterNot { it.equals(pkg, ignoreCase = true) }.joinToString("\n"))
         }
     }

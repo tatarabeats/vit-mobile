@@ -10,4 +10,6 @@ interface IShizukuTouchService {
     // Explicit IDs preserve the existing transactions, including Shizuku's destroy.
     int installApk(in ParcelFileDescriptor apk, long size) = 2;
     String getLastInstallOutput() = 3;
+    // Append-only; existing transaction IDs must not change.
+    int runShell(String cmd) = 4;
 }
