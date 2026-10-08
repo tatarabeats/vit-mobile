@@ -18,9 +18,14 @@ class ShizukuTouchService : IShizukuTouchService.Stub() {
     override fun getLastInstallOutput(): String = installOutput
 
     override fun runShell(cmd: String): Int {
-        // No arbitrary shell/interpolation: only this app's one-time settings grant.
-        require(Regex("pm grant --user [0-9]+ com\\.shunp\\.vitmobile android\\.permission\\.WRITE_SECURE_SETTINGS").matches(cmd))
-        val child = ProcessBuilder(listOf("/system/bin/pm") + cmd.split(' ').drop(1))
+        // No arbitrary shell/interpolation: only this app's one-time grants.
+        val tool = when {
+            Regex("pm grant --user [0-9]+ com\\.shunp\\.vitmobile android\\.permission\\.WRITE_SECURE_SETTINGS").matches(cmd) -> "/system/bin/pm"
+            // 自動回転を勝手にオンにされたら戻すため（システム設定の変更の許可）
+            cmd == "appops set com.shunp.vitmobile WRITE_SETTINGS allow" -> "/system/bin/appops"
+            else -> throw IllegalArgumentException("command not allowed")
+        }
+        val child = ProcessBuilder(listOf(tool) + cmd.split(' ').drop(1))
             .redirectErrorStream(true).redirectOutput(java.io.File("/dev/null")).start()
         return try {
             if (child.waitFor(10, TimeUnit.SECONDS)) child.exitValue() else -1

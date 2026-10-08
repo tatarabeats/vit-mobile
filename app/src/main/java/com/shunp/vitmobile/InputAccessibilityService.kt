@@ -121,8 +121,26 @@ class InputAccessibilityService : AccessibilityService() {
         }
     }
 
+    // 自動回転が勝手にオンにされたら、その時の前面アプリを記録してオフに戻す（2026-10-09 駿平さん「勝手に画面の回転がオンにされるのうざい」）
+    private val rotationObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            try {
+                val on = android.provider.Settings.System.getInt(contentResolver, android.provider.Settings.System.ACCELEROMETER_ROTATION, 0) == 1
+                if (!on) return
+                val fg = try { rootInActiveWindow?.packageName?.toString() } catch (_: Exception) { null }
+                val reverted = android.provider.Settings.System.canWrite(this@InputAccessibilityService) &&
+                    android.provider.Settings.System.putInt(contentResolver, android.provider.Settings.System.ACCELEROMETER_ROTATION, 0)
+                diag("rotation: turned on (foreground=$fg); reverted=$reverted")
+            } catch (_: Exception) {}
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
+        try {
+            contentResolver.registerContentObserver(
+                android.provider.Settings.System.getUriFor(android.provider.Settings.System.ACCELEROMETER_ROTATION), false, rotationObserver)
+        } catch (_: Exception) {}
         val filter = IntentFilter(ACTION_PASTE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)

@@ -226,6 +226,12 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                                     val current = SystemClock.uptimeMillis()
                                     if (lastFire?.let { current - it < 800 } == true) return@post
                                     lastFire = current
+                                    // キーボードの上で始まったなぞり（フリック入力）は無視する（2026-10-09 駿平さん）
+                                    val imeTop = InputAccessibilityService.imeTop()
+                                    if (imeTop >= 0 && parser.lastStartY >= imeTop) {
+                                        log("swipe ignored (started on keyboard y=${parser.lastStartY.toInt()} imeTop=$imeTop)")
+                                        return@post
+                                    }
                                     log("swipe detected")
                                     owner.openClaudeSidebar()
                                 }
