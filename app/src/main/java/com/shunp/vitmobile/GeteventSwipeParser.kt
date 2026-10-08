@@ -119,28 +119,30 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                     val cooled = lastFire == null || time - lastFire!! >= 800
                     // なぞっている途中で横向きと分かった瞬間に決める。指を離すまで待つと、
                     // その間の縦の揺れで Claude のチャットが動いてしまう（2026-10-08 駿平さん）
-                    val early = !lifted && elapsed in 0L..450L && cooled
-                        && abs(dx) >= display.width * 0.08f
-                        && abs(dx) >= maxAbsDy * 2.5f
-                        && maxAbsDy < display.height * 0.04f
-                        && (if (dx > 0) minDx > -display.width * 0.03f else maxDx < display.width * 0.03f)
+                    // 感度を上げた（2026-10-08 駿平さん「明らかに横なのに縦にスクロールされる」）。
+                    // 早く決めるほど、縦の揺れで Claude のチャットが動く前に一覧が出る
+                    val early = !lifted && elapsed in 0L..350L && cooled
+                        && dx >= display.width * 0.06f
+                        && dx >= maxAbsDy * 2.0f
+                        && maxAbsDy < display.height * 0.05f
+                        && minDx > -display.width * 0.03f
                     if (early) {
                         lastGesture = "early dx=${dx.toInt()} maxDy=${maxAbsDy.toInt()} ms=$elapsed"
-                        lastDirection = if (dx > 0) 1 else -1
+                        lastDirection = 1
                         detected = true
                         lastFire = time
                         blocked = true
                     } else if (lifted && slots.values.none { it.active }) {
                         val ok = time - startTime in 0L..700L
-                            && abs(dx) >= display.width * 0.12f
+                            && dx >= display.width * 0.12f
                             // 実測: 素早い右スワイプ dx=198/maxDy=69、上下スクロール dx=73/maxDy=302（2026-10-08）
-                            && abs(dx) >= maxAbsDy * 2.5f
-                            && maxAbsDy < display.height * 0.06f
-                            && (if (dx > 0) minDx > -display.width * 0.03f else maxDx < display.width * 0.03f)
+                            && dx >= maxAbsDy * 2.0f
+                            && maxAbsDy < display.height * 0.07f
+                            && minDx > -display.width * 0.03f
                             && (lastFire == null || time - lastFire!! >= 800)
                         lastGesture = "dx=${dx.toInt()} maxDy=${maxAbsDy.toInt()} ms=${time - startTime} ok=$ok"
                         if (ok) {
-                            lastDirection = if (dx > 0) 1 else -1
+                            lastDirection = 1
                             detected = true
                             lastFire = time
                             blocked = true

@@ -218,10 +218,8 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                                     val current = SystemClock.uptimeMillis()
                                     if (lastFire?.let { current - it < 800 } == true) return@post
                                     lastFire = current
-                                    val dir = parser.lastDirection
-                                    log("swipe detected dir=$dir")
-                                    val acted = if (dir < 0) owner.closeClaudeSidebar() else owner.openClaudeSidebar()
-                                    if (acted) owner.sidebarHaptic()
+                                    log("swipe detected")
+                                    owner.openClaudeSidebar()
                                 }
                             }
                         }

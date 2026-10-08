@@ -304,30 +304,6 @@ class InputAccessibilityService : AccessibilityService() {
         OverlayService.refreshClaudeSwipe()
     }
 
-    /** 開閉した瞬間のごく短い振動（ChatGPT と同じく、効いたことを指先で分かるように） */
-    fun sidebarHaptic() {
-        try {
-            val v = if (Build.VERSION.SDK_INT >= 31)
-                (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager).defaultVibrator
-            else @Suppress("DEPRECATION") getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator
-            if (Build.VERSION.SDK_INT >= 29) v.vibrate(android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_TICK))
-            else v.vibrate(android.os.VibrationEffect.createOneShot(12, 80))
-        } catch (_: Exception) {}
-    }
-
-    /** 一覧が開いている時だけ、戻る操作で閉じる（左へなぞった時）。閉じたら true */
-    fun closeClaudeSidebar(): Boolean {
-        if (!isClaudeSidebarOpenNow()) {
-            sidebarDiag("close skipped (sidebar not open)")
-            return false
-        }
-        val ok = performGlobalAction(GLOBAL_ACTION_BACK)
-        sidebarDiag("close by back ok=$ok")
-        return ok
-    }
-
-    /** openClaudeSidebar の「既に開いている」判定だけを使う */
-    private fun isClaudeSidebarOpenNow(): Boolean = openClaudeSidebar(checkOnly = true)
 
     /** Return value means click accepted / tap dispatched, not proof the drawer opened.
      *  checkOnly=true の時は押さずに「一覧が開いているか」だけを返す。 */
