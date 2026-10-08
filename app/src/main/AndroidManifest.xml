@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- アプリ自身で更新を入れるため（QRを読む手間をなくす・2026-08-20） -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
     <!-- targetSdk 30 以降はパッケージ可視性の制限があり、宣言しないと
          他アプリ（Claude / ChatGPT / Brave 等）が一覧に出てこない -->
@@ -83,6 +84,10 @@
             android:exported="false"
             android:foregroundServiceType="microphone"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+
+        <receiver
+            android:name=".UpdateInstallReceiver"
+            android:exported="false" />
 
         <receiver
             android:name=".BootReceiver"

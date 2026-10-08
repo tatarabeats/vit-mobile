@@ -98,6 +98,12 @@ class OverlayService : Service() {
     private var lastMicY = 0  // 収納時の高さを保持
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val updateCheck = object : Runnable {
+        override fun run() {
+            Updater.checkAndNotify(this@OverlayService)
+            mainHandler.postDelayed(this, Updater.CHECK_INTERVAL_MS)
+        }
+    }
 
     private val gold = Color.parseColor("#FFF0C040")
     private val navy = Color.parseColor("#FF0A0E1A")
@@ -112,6 +118,7 @@ class OverlayService : Service() {
         updateClaudeSwipeOverlay()
         recorder = VoiceRecorder(this)
         recorder?.recoverPending()
+        mainHandler.post(updateCheck)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -1062,5 +1069,6 @@ class OverlayService : Service() {
         mainHandler.removeCallbacksAndMessages(null)
         removeAllViews()
         recorder?.release()
+        isRecording = false
     }
 }
