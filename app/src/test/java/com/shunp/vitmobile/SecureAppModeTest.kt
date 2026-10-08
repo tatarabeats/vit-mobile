@@ -48,15 +48,14 @@ class SecureAppModeTest {
         fun killProcess() { queue.clear() }
     }
 
-    @Test fun commitsBeforeStopAndWaitsOneSecondBeforeDisable() {
+    @Test fun commitsThenDisablesImmediatelyThenStops() {
+        // カードアプリは起動直後に見るので、待たずにすぐオフにしてから Shizuku を止める
         val p = Fake()
         val m = SecureAppMode(p, null)
         m.foreground(true)
-        assertEquals(listOf("save", "stop"), p.events)
-        p.advance(999)
-        assertTrue(p.writes.isEmpty())
-        p.advance(1)
         assertEquals(DebugSettings(0, 0, 0), p.settings)
+        assertEquals("save", p.events.first())
+        assertEquals("stop", p.events.last())
         assertEquals(DebugSettings(1, 1, 1), p.journal!!.original)
     }
 
