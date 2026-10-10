@@ -183,12 +183,18 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     /** Shizuku の「インテントを表示」画面に出る合言葉を覚える（作り直されても開けば覚え直す） */
-    private var lastAuthScan = 0L
+    private var authScanPending = false
+    // 画面が落ち着くのを待ってから読む（イベント直後はまだ下から出てくる途中）
     private fun learnShizukuAuth() {
+        if (authScanPending) return
+        authScanPending = true
+        val h = android.os.Handler(android.os.Looper.getMainLooper())
+        h.postDelayed({ scanShizukuAuth() }, 700)
+        h.postDelayed({ scanShizukuAuth(); authScanPending = false }, 1800)
+    }
+
+    private fun scanShizukuAuth() {
         try {
-            val now = android.os.SystemClock.uptimeMillis()
-            if (now - lastAuthScan < 500) return
-            lastAuthScan = now
             val roots = (try { windows.mapNotNull { it.root } } catch (_: Exception) { emptyList() }) + listOfNotNull(rootInActiveWindow)
             val texts = mutableListOf<String>()
             fun walk(n: android.view.accessibility.AccessibilityNodeInfo?, depth: Int) {
