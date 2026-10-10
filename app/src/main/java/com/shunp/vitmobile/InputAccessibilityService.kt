@@ -183,16 +183,20 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     /** Shizuku の「インテントを表示」画面に出る合言葉を覚える（作り直されても開けば覚え直す） */
+    private var lastAuthScan = 0L
     private fun learnShizukuAuth() {
         try {
-            val root = rootInActiveWindow ?: return
+            val now = android.os.SystemClock.uptimeMillis()
+            if (now - lastAuthScan < 500) return
+            lastAuthScan = now
+            val roots = (try { windows.mapNotNull { it.root } } catch (_: Exception) { emptyList() }) + listOfNotNull(rootInActiveWindow)
             val texts = mutableListOf<String>()
             fun walk(n: android.view.accessibility.AccessibilityNodeInfo?, depth: Int) {
                 if (n == null || depth > 30) return
                 n.text?.toString()?.let { texts += it }
                 for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
             }
-            walk(root, 0)
+            roots.filter { it.packageName == "moe.shizuku.privileged.api" }.forEach { walk(it, 0) }
             if (texts.none { it.trim() == "auth:" }) return
             val token = texts.firstOrNull { Regex("[A-Za-z0-9]{16,64}").matches(it.trim()) }?.trim() ?: return
             if (token != Prefs.getShizukuAuth(this)) {
@@ -212,6 +216,8 @@ class InputAccessibilityService : AccessibilityService() {
             if (e.packageName == "moe.shizuku.privileged.api") learnShizukuAuth()
             return
         }
+        // 合言葉の画面は下からせり上がるので、表示が落ち着いた後の書き換えイベントでも探す
+        if (e.packageName == "moe.shizuku.privileged.api") learnShizukuAuth()
         if (e.eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED
             && e.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             && e.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED
