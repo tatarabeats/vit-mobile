@@ -52,8 +52,33 @@ internal class SecureAppsController private constructor(context: Context) : Secu
         if (pkg.isNullOrBlank() || pkg == context.packageName || pkg == "com.android.systemui") return
         val ime = context.getSystemService(InputMethodManager::class.java)
         if (ime.inputMethodList.any { it.packageName == pkg }) return
-        machine.foreground(Prefs.isSecureApp(context, pkg))
+        val secure = Prefs.isSecureApp(context, pkg)
+        val now = System.currentTimeMillis()
+        if (secure) {
+            if (pkg != securePkg) { securePkg = pkg; secureSince = now }
+        } else if (securePkg != null) {
+            val p = securePkg!!
+            securePkg = null
+            // カードアプリは起動直後（スプラッシュ）に開発者向けオプションを調べて自分で閉じる。
+            // VIT がオフにするのが一瞬遅れるので、数秒で閉じたらオフのまま1回だけ開き直す（2026-10-10 Vpass が開けなかった件）
+            if (now - secureSince < 6_000 && now - (relaunchedAt[p] ?: 0L) > 120_000) {
+                val intent = context.packageManager.getLaunchIntentForPackage(p)
+                if (intent != null) {
+                    relaunchedAt[p] = now
+                    try {
+                        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        log("relaunch $p after early close")
+                        return
+                    } catch (e: Exception) { log("relaunch failed ${e.javaClass.simpleName}") }
+                }
+            }
+        }
+        machine.foreground(secure)
     }
+
+    private var securePkg: String? = null
+    private var secureSince = 0L
+    private val relaunchedAt = HashMap<String, Long>()
 
     fun permissionAvailable() = machine.permissionAvailable()
 

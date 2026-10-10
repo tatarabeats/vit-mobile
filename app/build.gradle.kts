@@ -15,8 +15,8 @@ android {
         //  2) Android 12 の「他アプリ上の ACTION_OUTSIDE 座標を隠す」制限を避け、
         //     起動ゾーンの位置判定に座標を使えるようにする（2026-08-12）
         targetSdk = 30
-        versionCode = 84
-        versionName = "0.9.46"
+        versionCode = 85
+        versionName = "0.9.47"
     }
 
     signingConfigs {
