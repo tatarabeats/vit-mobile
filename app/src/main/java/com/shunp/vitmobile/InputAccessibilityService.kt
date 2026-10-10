@@ -182,6 +182,26 @@ class InputAccessibilityService : AccessibilityService() {
         return sidebarForegroundPackage == CLAUDE_PACKAGE
     }
 
+    /** Shizuku の「インテントを表示」画面に出る合言葉を覚える（作り直されても開けば覚え直す） */
+    private fun learnShizukuAuth() {
+        try {
+            val root = rootInActiveWindow ?: return
+            val texts = mutableListOf<String>()
+            fun walk(n: android.view.accessibility.AccessibilityNodeInfo?, depth: Int) {
+                if (n == null || depth > 30) return
+                n.text?.toString()?.let { texts += it }
+                for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
+            }
+            walk(root, 0)
+            if (texts.none { it.trim() == "auth:" }) return
+            val token = texts.firstOrNull { Regex("[A-Za-z0-9]{16,64}").matches(it.trim()) }?.trim() ?: return
+            if (token != Prefs.getShizukuAuth(this)) {
+                Prefs.setShizukuAuth(this, token)
+                diag("shizuku auth learned")
+            }
+        } catch (_: Exception) {}
+    }
+
     /** フォーカスイベントを常時監視して、最後にフォーカスされた入力欄を記憶 */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val e = event ?: return
@@ -189,6 +209,7 @@ class InputAccessibilityService : AccessibilityService() {
             || e.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             updateSidebarForeground(sidebarWindowPackage())
             observeSecureForeground(e.packageName?.toString(), e.windowId)
+            if (e.packageName == "moe.shizuku.privileged.api") learnShizukuAuth()
             return
         }
         if (e.eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED

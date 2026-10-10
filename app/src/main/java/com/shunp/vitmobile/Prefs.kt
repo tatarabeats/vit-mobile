@@ -101,6 +101,14 @@ object Prefs {
         return edit.commit()
     }
 
+    /** Shizuku（thedjchi 版）の START/STOP インテントに付ける合言葉。Shizuku の「インテントを表示」画面から自動で覚える */
+    fun getShizukuAuth(ctx: Context): String =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("shizuku_auth", "") ?: ""
+
+    fun setShizukuAuth(ctx: Context, token: String) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("shizuku_auth", token).apply()
+    }
+
     fun isClaudeSwipeEnabled(ctx: Context): Boolean =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(KEY_CLAUDE_SWIPE, true)

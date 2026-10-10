@@ -110,8 +110,10 @@ internal class SecureAppsController private constructor(context: Context) : Secu
     override fun broadcast(start: Boolean) {
         val action = "moe.shizuku.privileged.api." + if (start) "START" else "STOP"
         try {
-            context.sendBroadcast(Intent(action).setPackage("moe.shizuku.privileged.api"))
-            log("broadcast ${if (start) "START" else "STOP"}")
+            // 合言葉（auth）が無いと Shizuku は命令を無視する（2026-10-10 再起動できずスワイプが止まった原因）
+            val auth = Prefs.getShizukuAuth(context)
+            context.sendBroadcast(Intent(action).setPackage("moe.shizuku.privileged.api").putExtra("auth", auth))
+            log("broadcast ${if (start) "START" else "STOP"} auth=${if (auth.isEmpty()) "missing" else "set"}")
         } catch (e: Exception) { log("broadcast failed ${e.javaClass.simpleName}: ${e.message}") }
     }
 
