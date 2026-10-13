@@ -67,6 +67,14 @@ class InputAccessibilityService : AccessibilityService() {
         /** 直前の判定で指の下にあった部品（記録用） */
         var lastNodesAtPoint = ""
 
+        /** 入力欄を含む枠（画面下の文字入力欄）は表ではない */
+        private fun hasEditText(n: android.view.accessibility.AccessibilityNodeInfo?, depth: Int): Boolean {
+            if (n == null || depth > 5) return false
+            if (n.className?.toString()?.endsWith("EditText") == true) return true
+            for (i in 0 until n.childCount) if (hasEditText(n.getChild(i), depth + 1)) return true
+            return false
+        }
+
         fun horizontalScrollerAt(x: Int, y: Int): String? {
             val svc = instance ?: return null
             if (x < 0 || y < 0) return null
@@ -84,7 +92,17 @@ class InputAccessibilityService : AccessibilityService() {
                     if (r.contains(x, y) && r.height() < screenH * 0.6f) {
                         val cls = n.className?.toString()?.substringAfterLast('.') ?: ""
                         val ids = n.actionList.map { it.id }
-                        if (seen.size < 8) seen += "$cls${if (n.isScrollable) "*" else ""}${r.width()}x${r.height()}"
+                        val hasText = !n.text.isNullOrBlank() || !n.contentDescription.isNullOrBlank()
+                        if (seen.size < 8) seen += "$cls${if (n.isScrollable) "*" else ""}${if (hasText) "t" else ""}${if (n.isClickable) "c" else ""}${r.width()}x${r.height()}/${n.childCount}"
+                        // Claude アプリの表（とコード）は横スクロールの印が無い。文字を持たない・押せない・画面幅いっぱいの
+                        // 高さのある部品として出るので、その形で見分ける（2026-10-14 実測: 表の上で View984x907）
+                        val screenW = svc.resources.displayMetrics.widthPixels
+                        if (cls == "View" && !hasText && !n.isClickable && !n.isScrollable
+                            && r.width() >= screenW * 0.85f && r.left > 0 && r.right < screenW && r.height() >= 120
+                            && n.packageName == CLAUDE_PACKAGE && !hasEditText(n, 0)) {
+                            found = "table-like $cls ${r.width()}x${r.height()}"
+                            return
+                        }
                         // 画面いっぱいの横ページ送り（タブの切り替え等）は表ではないので、画面の高さの6割より低いものだけ見る
                         if (cls.contains("HorizontalScrollView") || left in ids || right in ids) {
                             found = "$cls ${r.width()}x${r.height()}"
