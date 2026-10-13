@@ -237,7 +237,7 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                                         log("swipe ignored (horizontal scroller $it)")
                                         return@post
                                     }
-                                    log("swipe detected")
+                                    log("swipe detected at ${parser.lastStartX.toInt()},${parser.lastStartY.toInt()} under=[${InputAccessibilityService.lastNodesAtPoint}]")
                                     owner.openClaudeSidebar()
                                 }
                             }
