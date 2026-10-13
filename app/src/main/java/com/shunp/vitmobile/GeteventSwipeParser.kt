@@ -45,6 +45,8 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
     private var startY: Float? = null
     /** 直前に成立したなぞりの開始位置（画面座標の Y）。キーボード上かの判定に使う */
     var lastStartY = -1f
+    /** 同じく X。横スクロールする表の上で始まったかの判定に使う */
+    var lastStartX = -1f
     private var maxAbsDy = 0f
     private var minDx = 0f
     private var maxDx = 0f
@@ -131,7 +133,7 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                     if (early) {
                         lastGesture = "early dx=${dx.toInt()} maxDy=${maxAbsDy.toInt()} ms=$elapsed"
                         lastDirection = 1
-                        lastStartY = startY ?: -1f
+                        lastStartY = startY ?: -1f; lastStartX = startX ?: -1f
                         detected = true
                         lastFire = time
                         blocked = true
@@ -146,7 +148,7 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         lastGesture = "dx=${dx.toInt()} maxDy=${maxAbsDy.toInt()} ms=${time - startTime} ok=$ok"
                         if (ok) {
                             lastDirection = 1
-                            lastStartY = startY ?: -1f
+                            lastStartY = startY ?: -1f; lastStartX = startX ?: -1f
                             detected = true
                             lastFire = time
                             blocked = true

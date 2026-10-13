@@ -63,6 +63,38 @@ class InputAccessibilityService : AccessibilityService() {
          * 表示中のソフトキーボードの上端 Y。出ていなければ -1。
          * キーボードの端（バックスペース等）の連打で起動ゾーンが反応しないよう除外するのに使う。
          */
+        /** 画面上の (x, y) にある、横にスクロールできる部品の説明を返す（無ければ null） */
+        fun horizontalScrollerAt(x: Int, y: Int): String? {
+            val svc = instance ?: return null
+            if (x < 0 || y < 0) return null
+            return try {
+                val left = android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT.id
+                val right = android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id
+                val r = Rect()
+                var found: String? = null
+                fun walk(n: android.view.accessibility.AccessibilityNodeInfo?, depth: Int) {
+                    if (n == null || found != null || depth > 60) return
+                    n.getBoundsInScreen(r)
+                    if (!r.contains(x, y)) return
+                    val cls = n.className?.toString() ?: ""
+                    val ids = n.actionList.map { it.id }
+                    // 画面いっぱいの横ページ送り（タブの切り替え等）は表ではないので除く。表は画面の高さの6割より低い
+                    val screenH = svc.resources.displayMetrics.heightPixels
+                    if ((cls.contains("HorizontalScrollView") || left in ids || right in ids) && r.height() < screenH * 0.6f) {
+                        found = "$cls ${r.width()}x${r.height()}"
+                        return
+                    }
+                    for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
+                }
+                for (w in svc.windows) {
+                    if (w.type != AccessibilityWindowInfo.TYPE_APPLICATION) continue
+                    walk(w.root, 0)
+                    if (found != null) break
+                }
+                found
+            } catch (_: Exception) { null }
+        }
+
         fun imeTop(): Int {
             val svc = instance ?: return -1
             return try {

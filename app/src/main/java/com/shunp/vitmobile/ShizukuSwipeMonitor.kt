@@ -232,6 +232,11 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                                         log("swipe ignored (started on keyboard y=${parser.lastStartY.toInt()} imeTop=$imeTop)")
                                         return@post
                                     }
+                                    // 横スクロールできる表などの上で始まったなぞりは、表を動かしたいだけなので開かない（2026-10-13 駿平さん）
+                                    InputAccessibilityService.horizontalScrollerAt(parser.lastStartX.toInt(), parser.lastStartY.toInt())?.let {
+                                        log("swipe ignored (horizontal scroller $it)")
+                                        return@post
+                                    }
                                     log("swipe detected")
                                     owner.openClaudeSidebar()
                                 }
