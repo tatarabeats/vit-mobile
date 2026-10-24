@@ -117,7 +117,10 @@ class InputAccessibilityService : AccessibilityService() {
                     if (found != null) break
                 }
                 lastNodesAtPoint = seen.joinToString(" ")
-                found
+                // グラフ（絵として描かれた図）は部品の情報が出てこず、指の下に何も見つからない。
+                // 何も無い所で始まったなぞりはグラフの横スクロールとみなして開かない（2026-10-25 駿平さん
+                // 「横スクロールのグラフを横スクロールしてる時にめっちゃ干渉してくる」。記録で under=[] を確認）
+                found ?: if (seen.isEmpty()) "no-node (chart-like)" else null
             } catch (_: Exception) { null }
         }
 
