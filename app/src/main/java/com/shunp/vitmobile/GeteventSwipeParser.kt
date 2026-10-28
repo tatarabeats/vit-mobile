@@ -145,7 +145,7 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         // 親指で弧を描くと斜め上に流れる（2026-10-28 実測 dx=130〜152/maxDy=212〜233 が全部はじかれ
                         // 駿平さん「スワイプ反応しねえ」）。横にしっかり動いていれば、縦の揺れが大きくても開く。
                         // 上下スクロールは横がほとんど動かない（dx=73 など）ので、横の最低量で区別する
-                        val arc = dx >= display.width * 0.11f
+                        val arc = dx >= display.width * 0.12f
                             && dx >= maxAbsDy * 0.55f
                             && maxAbsDy < display.height * 0.14f
                         val ok = time - startTime in 0L..700L

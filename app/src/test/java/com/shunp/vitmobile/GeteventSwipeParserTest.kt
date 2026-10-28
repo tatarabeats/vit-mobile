@@ -84,7 +84,7 @@ class GeteventSwipeParserTest {
         val s = Stream(device)
         s.down()
         s.time += 300
-        assertFalse(s.finish(1350, 1200)) // 横が短い（dx<11%）。raw の比は大きくても画面の px で判定する
+        assertFalse(s.finish(1350, 1200)) // 横が短い（dx<12%）。raw の比は大きくても画面の px で判定する
     }
 
     @Test fun verticalAndShortMovementsDoNotFire() {
