@@ -138,11 +138,18 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         lastFire = time
                         blocked = true
                     } else if (lifted && slots.values.none { it.active }) {
-                        val ok = time - startTime in 0L..700L
-                            && dx >= display.width * 0.12f
+                        val straight = dx >= display.width * 0.12f
                             // 実測: 素早い右スワイプ dx=198/maxDy=69、上下スクロール dx=73/maxDy=302（2026-10-08）
                             && dx >= maxAbsDy * 2.0f
                             && maxAbsDy < display.height * 0.07f
+                        // 親指で弧を描くと斜め上に流れる（2026-10-28 実測 dx=130〜152/maxDy=212〜233 が全部はじかれ
+                        // 駿平さん「スワイプ反応しねえ」）。横にしっかり動いていれば、縦の揺れが大きくても開く。
+                        // 上下スクロールは横がほとんど動かない（dx=73 など）ので、横の最低量で区別する
+                        val arc = dx >= display.width * 0.11f
+                            && dx >= maxAbsDy * 0.55f
+                            && maxAbsDy < display.height * 0.14f
+                        val ok = time - startTime in 0L..700L
+                            && (straight || arc)
                             && minDx > -display.width * 0.03f
                             && (lastFire == null || time - lastFire!! >= 800)
                         lastGesture = "dx=${dx.toInt()} maxDy=${maxAbsDy.toInt()} ms=${time - startTime} ok=$ok"

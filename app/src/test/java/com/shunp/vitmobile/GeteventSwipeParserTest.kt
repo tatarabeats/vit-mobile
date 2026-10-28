@@ -84,7 +84,7 @@ class GeteventSwipeParserTest {
         val s = Stream(device)
         s.down()
         s.time += 300
-        assertFalse(s.finish(1600, 1200)) // dx=158px, dy=114px, despite raw dx/dy=3
+        assertFalse(s.finish(1350, 1200)) // 横が短い（dx<11%）。raw の比は大きくても画面の px で判定する
     }
 
     @Test fun verticalAndShortMovementsDoNotFire() {
@@ -281,5 +281,13 @@ class GeteventSwipeParserTest {
         val s = Stream(device)
         assertFalse(s.move(1000))
         assertFalse(s.finish(1800))
+    }
+
+    @Test fun thumbArcSwipeOpens() {
+        // 2026-10-28 実測: 横 140px・縦 220px ほど斜め上に流れる親指のなぞり
+        val s = Stream(device)
+        s.down(1000, 2000)
+        s.time += 150
+        assertTrue(s.finish(1000 + 140 * 4095 / 1080, 2000 - 220 * 4095 / 2340))
     }
 }
