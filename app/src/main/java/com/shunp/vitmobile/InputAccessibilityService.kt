@@ -85,10 +85,13 @@ class InputAccessibilityService : AccessibilityService() {
                 val r = Rect()
                 var found: String? = null
                 val seen = mutableListOf<String>()
+                // 指の下に、縦にスクロールできる会話の一覧があるか（グラフはその中にしか出ない）
+                var inScrollingList = false
                 // Compose は親の枠の外に子が出ることがあるので、親の枠で探索を打ち切らず全部見る（2026-10-13 表を見落とした）
                 fun walk(n: android.view.accessibility.AccessibilityNodeInfo?, depth: Int) {
                     if (n == null || found != null || depth > 80) return
                     n.getBoundsInScreen(r)
+                    if (r.contains(x, y) && n.isScrollable) inScrollingList = true
                     if (r.contains(x, y) && r.height() < screenH * 0.6f) {
                         val cls = n.className?.toString()?.substringAfterLast('.') ?: ""
                         val ids = n.actionList.map { it.id }
@@ -116,11 +119,14 @@ class InputAccessibilityService : AccessibilityService() {
                     walk(w.root, 0)
                     if (found != null) break
                 }
-                lastNodesAtPoint = seen.joinToString(" ")
+                lastNodesAtPoint = seen.joinToString(" ") + if (inScrollingList) " (in list)" else ""
                 // グラフ（絵として描かれた図）は部品の情報が出てこず、指の下に何も見つからない。
                 // 何も無い所で始まったなぞりはグラフの横スクロールとみなして開かない（2026-10-25 駿平さん
                 // 「横スクロールのグラフを横スクロールしてる時にめっちゃ干渉してくる」。記録で under=[] を確認）
-                found ?: if (seen.isEmpty()) "no-node (chart-like)" else null
+                // ただし、何も書いていない新規スレッドの画面も真ん中に部品が無く、ここで全部捨てていた（2026-11-03 駿平さん
+                // 「新規スレッドの画面で左から右のスワイプが効かない」）。会話が無ければグラフも無いので、
+                // 縦にスクロールする会話の一覧の中で始まった時だけグラフとみなす。
+                found ?: if (seen.isEmpty() && inScrollingList) "no-node (chart-like)" else null
             } catch (_: Exception) { null }
         }
 
