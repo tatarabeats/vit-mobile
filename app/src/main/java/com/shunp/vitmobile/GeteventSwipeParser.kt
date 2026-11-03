@@ -151,8 +151,10 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         // 上下スクロールは横がほとんど動かない（dx=73 など）ので、横の最低量で区別する
                         // 2026-11-03 さらに実測: dx=147〜228/maxDy=322〜469/233〜1332ms の弧が全部はじかれ
                         // 駿平さん「全然効かない」。上下スクロールは dx が -30〜72 なので、横 0.12 幅以上あれば開く
+                        // 2026-11-04 駿平さん「斜めがやりすぎで、上下スクロールでもメニューが開く。45度を基準に、
+                        // それより縦ならスクロール、横寄りならメニュー」→ 縦の動きが横以下（45度より横寄り）の時だけ開く
                         val arc = dx >= display.width * 0.12f
-                            && dx >= maxAbsDy * 0.4f
+                            && dx >= maxAbsDy
                             && maxAbsDy < display.height * 0.22f
                         val ok = time - startTime in 0L..(if (straight) 700L else 1400L)
                             && (straight || arc)

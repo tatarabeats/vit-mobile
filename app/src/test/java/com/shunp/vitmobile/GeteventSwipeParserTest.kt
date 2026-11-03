@@ -171,12 +171,19 @@ class GeteventSwipeParserTest {
         assertFalse(s.up())
     }
 
-    @Test fun thumbArcWithLargeVerticalDriftOpens() {
-        // 2026-11-03 実測 dx=190/maxDy=441/ms=292 がはじかれていた
+    @Test fun steeperThan45DegreesDoesNotOpen() {
+        // 2026-11-04 45度より縦寄りは上下スクロール扱い
         val s = Stream(device)
         s.down(1000, 2000)
         s.time += 290
-        assertTrue(s.finish(1720, 1230))
+        assertFalse(s.finish(1720, 1230))
+    }
+
+    @Test fun thumbArcFlatterThan45DegreesOpens() {
+        val s = Stream(device)
+        s.down(1000, 2000)
+        s.time += 290
+        assertTrue(s.finish(2000, 1700))
     }
 
     @Test fun verticalScrollDriftingRightAtTheEndDoesNotOpen() {
