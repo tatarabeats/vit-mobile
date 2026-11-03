@@ -298,11 +298,18 @@ class GeteventSwipeParserTest {
         assertFalse(s.finish(1800))
     }
 
-    @Test fun thumbArcSwipeOpens() {
-        // 2026-10-28 実測: 横 140px・縦 220px ほど斜め上に流れる親指のなぞり
+    @Test fun thumbArcSteeperThan45IsAScroll() {
+        // 横 140px・縦 220px（45度より縦寄り）は 2026-11-04 から上下スクロール扱い
         val s = Stream(device)
         s.down(1000, 2000)
         s.time += 150
-        assertTrue(s.finish(1000 + 140 * 4095 / 1080, 2000 - 220 * 4095 / 2340))
+        assertFalse(s.finish(1000 + 140 * 4095 / 1080, 2000 - 220 * 4095 / 2340))
+    }
+
+    @Test fun thumbArcAt45Opens() {
+        val s = Stream(device)
+        s.down(1000, 2000)
+        s.time += 150
+        assertTrue(s.finish(1000 + 200 * 4095 / 1080, 2000 - 190 * 4095 / 2340))
     }
 }
