@@ -54,6 +54,8 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
     var lastDirection = 0
     /** 直前の1回のなぞりの縦横の動き（記録用） */
     var lastGesture: String? = null
+    /** 左へ横になぞった時の開始位置（表・グラフを左へ送ったかの記録用）。読んだ側が null に戻す */
+    var lastLeftSwipe: Pair<Float, Float>? = null
     private var startDisplay: SwipeDisplay? = null
     private var blocked = false
     private var lifted = false
@@ -120,7 +122,7 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                     if (dx < minDx) minDx = dx
                     if (dx > maxDx) maxDx = dx
                     val elapsed = time - startTime
-                    val cooled = lastFire == null || time - lastFire!! >= 800
+                    val cooled = lastFire == null || time - lastFire!! >= 300
                     // なぞっている途中で横向きと分かった瞬間に決める。指を離すまで待つと、
                     // その間の縦の揺れで Claude のチャットが動いてしまう（2026-10-08 駿平さん）
                     // 感度を上げた（2026-10-08 駿平さん「明らかに横なのに縦にスクロールされる」）。
@@ -138,6 +140,8 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         lastFire = time
                         blocked = true
                     } else if (lifted && slots.values.none { it.active }) {
+                        if (dx <= -display.width * 0.08f && -dx >= maxAbsDy * 1.5f)
+                            lastLeftSwipe = (startX ?: -1f) to (startY ?: -1f)
                         val straight = dx >= display.width * 0.12f
                             // 実測: 素早い右スワイプ dx=198/maxDy=69、上下スクロール dx=73/maxDy=302（2026-10-08）
                             && dx >= maxAbsDy * 2.0f
@@ -145,13 +149,15 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         // 親指で弧を描くと斜め上に流れる（2026-10-28 実測 dx=130〜152/maxDy=212〜233 が全部はじかれ
                         // 駿平さん「スワイプ反応しねえ」）。横にしっかり動いていれば、縦の揺れが大きくても開く。
                         // 上下スクロールは横がほとんど動かない（dx=73 など）ので、横の最低量で区別する
+                        // 2026-11-03 さらに実測: dx=147〜228/maxDy=322〜469/233〜1332ms の弧が全部はじかれ
+                        // 駿平さん「全然効かない」。上下スクロールは dx が -30〜72 なので、横 0.12 幅以上あれば開く
                         val arc = dx >= display.width * 0.12f
-                            && dx >= maxAbsDy * 0.55f
-                            && maxAbsDy < display.height * 0.14f
-                        val ok = time - startTime in 0L..700L
+                            && dx >= maxAbsDy * 0.4f
+                            && maxAbsDy < display.height * 0.22f
+                        val ok = time - startTime in 0L..(if (straight) 700L else 1400L)
                             && (straight || arc)
                             && minDx > -display.width * 0.03f
-                            && (lastFire == null || time - lastFire!! >= 800)
+                            && (lastFire == null || time - lastFire!! >= 300)
                         lastGesture = "dx=${dx.toInt()} maxDy=${maxAbsDy.toInt()} ms=${time - startTime} ok=$ok"
                         if (ok) {
                             lastDirection = 1

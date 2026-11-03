@@ -31,6 +31,9 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
     private var screenOn = false
     private var session: Session? = null
     private var lastFire: Long? = null
+    /** 左へ送った表・グラフ（判定の名前ごと）と、戻す分の回数 */
+    private val scrolledLeft = mutableMapOf<String, Int>()
+    private var scrolledAt = 0L
     private var permissionState: Boolean? = null
     private var needsConnectionCleanup = true
     @Volatile private var display = SwipeDisplay(0, 0, 0)
@@ -218,25 +221,48 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                                 parser.lastGesture = null
                                 if (owner.sidebarForegroundPackage == InputAccessibilityService.CLAUDE_PACKAGE) log("gesture $it")
                             }
+                            parser.lastLeftSwipe?.let { (lx, ly) ->
+                                parser.lastLeftSwipe = null
+                                main.post {
+                                    if (!owner.isClaudeForegroundForShizuku()) return@post
+                                    // 表・グラフを左へ送った。次の右なぞりは、送った分を戻す操作として1回だけ開かずに通す
+                                    InputAccessibilityService.horizontalScrollerAt(lx.toInt(), ly.toInt())?.let {
+                                        scrolledLeft[it] = (scrolledLeft[it] ?: 0) + 1
+                                        scrolledAt = SystemClock.uptimeMillis()
+                                        log("scroller moved left ($it) credit=${scrolledLeft[it]}")
+                                    }
+                                }
+                            }
                             if (accepted) {
                                 main.post {
                                     if (cancelled || session !== this || !screenOn || !power.isInteractive
                                         || !display.portrait || SystemClock.uptimeMillis() - now > 700) return@post
                                     if (!owner.isClaudeForegroundForShizuku()) return@post
                                     val current = SystemClock.uptimeMillis()
-                                    if (lastFire?.let { current - it < 800 } == true) return@post
-                                    lastFire = current
+                                    if (lastFire?.let { current - it < 300 } == true) return@post
                                     // キーボードの上で始まったなぞり（フリック入力）は無視する（2026-10-09 駿平さん）
                                     val imeTop = InputAccessibilityService.imeTop()
                                     if (imeTop >= 0 && parser.lastStartY >= imeTop) {
                                         log("swipe ignored (started on keyboard y=${parser.lastStartY.toInt()} imeTop=$imeTop)")
                                         return@post
                                     }
-                                    // 横スクロールできる表などの上で始まったなぞりは、表を動かしたいだけなので開かない（2026-10-13 駿平さん）
+                                    // 横スクロールする表・グラフの上で始まったなぞりは、先に左へ送ってあって
+                                    // 戻す分がある時だけ開かない（2026-10-13 駿平さん）。
+                                    // 以前は表らしい物の上では毎回開かず、表の無い画面でも開かなかった
+                                    // （2026-11-03 駿平さん「左から右にスワイプする動作が全然効かない」。記録で
+                                    // 同じ部品 984x380 の上の右なぞりが7回続けて捨てられていた）。
+                                    // 表は最初は左端にあり、右になぞっても動かない。左へ送った後だけ戻す余地がある
                                     InputAccessibilityService.horizontalScrollerAt(parser.lastStartX.toInt(), parser.lastStartY.toInt())?.let {
-                                        log("swipe ignored (horizontal scroller $it)")
-                                        return@post
+                                        if (current - scrolledAt > 120_000) scrolledLeft.clear()
+                                        val credit = scrolledLeft[it] ?: 0
+                                        if (credit > 0) {
+                                            scrolledLeft[it] = credit - 1
+                                            log("swipe ignored (scroll back on $it, credit left=${credit - 1})")
+                                            return@post
+                                        }
+                                        log("swipe on $it but nothing scrolled left; open")
                                     }
+                                    lastFire = current
                                     log("swipe detected at ${parser.lastStartX.toInt()},${parser.lastStartY.toInt()} under=[${InputAccessibilityService.lastNodesAtPoint}]")
                                     owner.openClaudeSidebar()
                                 }

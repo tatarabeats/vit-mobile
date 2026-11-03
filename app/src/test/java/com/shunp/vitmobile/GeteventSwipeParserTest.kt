@@ -131,7 +131,7 @@ class GeteventSwipeParserTest {
         val s = Stream(device)
         s.down()
         assertTrue(s.finish(1800))
-        s.time += 799
+        s.time += 299
         s.down()
         assertFalse(s.finish(1800))
         s.time += 1
@@ -169,6 +169,14 @@ class GeteventSwipeParserTest {
         assertTrue(s.move(1500))
         assertEquals(1, s.parser.lastDirection)
         assertFalse(s.up())
+    }
+
+    @Test fun thumbArcWithLargeVerticalDriftOpens() {
+        // 2026-11-03 実測 dx=190/maxDy=441/ms=292 がはじかれていた
+        val s = Stream(device)
+        s.down(1000, 2000)
+        s.time += 290
+        assertTrue(s.finish(1720, 1230))
     }
 
     @Test fun verticalScrollDriftingRightAtTheEndDoesNotOpen() {
