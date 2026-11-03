@@ -767,7 +767,7 @@ class InputAccessibilityService : AccessibilityService() {
                 } else {
                     diag("insert: failed after set_text pkg=$pkg")
                 }
-            }, 120)
+            }, 60)  // 送信までを短く（2026-11-03）。入っていなければ貼り付けでやり直す
             return
         }
 
@@ -886,7 +886,8 @@ class InputAccessibilityService : AccessibilityService() {
         }
         val probe = inserted.trim().take(12)
         val session = ++autoEnterSession
-        val delays = listOf(150L, 450L, 850L, 1400L, 2100L, 3000L, 3800L)
+        // 1回目を早める（押せなければ 450ms 以降で押し直す。2026-11-03 送信までを短く）
+        val delays = listOf(80L, 450L, 850L, 1400L, 2100L, 3000L, 3800L)
         var acted = false
         var pressedKey: String? = null
         for ((i, d) in delays.withIndex()) {
