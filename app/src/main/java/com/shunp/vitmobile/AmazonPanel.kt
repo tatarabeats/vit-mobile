@@ -257,11 +257,16 @@ class AmazonPanel(private val svc: AccessibilityService) {
     private fun loadGraph(a: String) {
         if (cachedFor == a && cachedBitmap != null) { image?.setImageBitmap(cachedBitmap); return }
         Thread {
-            val bmp = try {
-                client.newCall(Request.Builder().url(graphUrl(a)).build()).execute().use { r ->
-                    if (r.isSuccessful) r.body?.bytes()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } else null
-                }
-            } catch (_: Exception) { null }
+            var bmp: android.graphics.Bitmap? = null
+            for (attempt in 0 until 3) {
+                bmp = try {
+                    client.newCall(Request.Builder().url(graphUrl(a)).build()).execute().use { r ->
+                        if (r.isSuccessful) r.body?.bytes()?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } else null
+                    }
+                } catch (_: Exception) { null }
+                if (bmp != null || asin != a) break
+                Thread.sleep(1500L * (attempt + 1))
+            }
             main.post {
                 if (bmp != null) { cachedBitmap = bmp; cachedFor = a }
                 log(if (bmp != null) "graph loaded ${bmp.width}x${bmp.height}" else "graph failed")
