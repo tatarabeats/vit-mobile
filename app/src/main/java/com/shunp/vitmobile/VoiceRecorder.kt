@@ -162,6 +162,7 @@ class VoiceRecorder(private val ctx: Context) {
         maxTokens: Int
     ): String? {
         val groqKey = Prefs.getGroqKey(ctx)
+        var rateLimited = false
         if (!groqKey.isNullOrBlank()) for (model in groqModelOrder()) {
             val messages = JSONArray()
             messages.put(JSONObject().put("role", "system").put("content", systemPrompt))
@@ -188,15 +189,17 @@ class VoiceRecorder(private val ctx: Context) {
             val next = try {
                 client.newCall(req).execute().use { resp ->
                     if (resp.isSuccessful) {
-                        groqModel = model
+                        if (!rateLimited) groqModel = model  // 429 で乗り換えた時は一時的なので覚えない
                         val json = JSONObject(resp.body?.string() ?: "{}")
                         out = json.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")
                             ?.optString("content")?.trim()
                         0
                     } else {
                         android.util.Log.d("VIT", "llm $model HTTP ${resp.code}")
-                        // 廃止されたモデル（404/400）だけ次の候補へ。他の失敗は待たせないためここで諦める
-                        if (resp.code == 404 || resp.code == 400) 1 else 2
+                        // 廃止されたモデル（404/400）と回数制限（429。Groq の制限はモデルごと）は次の候補へ。
+                        // 他の失敗は待たせないためここで諦める（2026-11-05: PC 版で 429 が1日 312 回、整形の 6 割が失敗）
+                        if (resp.code == 429) rateLimited = true
+                        if (resp.code == 404 || resp.code == 400 || resp.code == 429) 1 else 2
                     }
                 }
             } catch (_: Exception) { 2 }
