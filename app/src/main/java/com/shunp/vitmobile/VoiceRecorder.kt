@@ -137,6 +137,13 @@ class VoiceRecorder(private val ctx: Context) {
                 android.util.Log.d("VIT", "drop silence segment: $t")
                 continue
             }
+            // PC 版と同じ基準（2026-11-05）: 評価が極端に悪い区間と、6文字以上で -1.0 未満の区間は、
+            // 黙っている間（動画の音など）のでたらめな文なので捨てる
+            val compactLen = t.count { !it.isWhitespace() && it !in "。、,.!！?？・" }
+            if (avgLp < -2.0 || (avgLp < -1.0 && compactLen >= 6)) {
+                android.util.Log.d("VIT", "drop low-confidence segment ($avgLp): $t")
+                continue
+            }
             sb.append(t)
         }
         return sb.toString().trim()

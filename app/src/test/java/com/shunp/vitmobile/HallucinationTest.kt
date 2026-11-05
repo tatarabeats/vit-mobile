@@ -24,4 +24,8 @@ class HallucinationTest {
     @Test fun normalSpeechUntouched() {
         assertEquals("視聴者を引きつけたい", Hallucination.filter("視聴者を引きつけたい", 3000, 500))
     }
+
+    @Test fun goranOutroStripped() {
+        assertEquals("で、今白ベースに", Hallucination.filter("それでは、この動画でご覧いただきありがとうございます。で、今白ベースに", 5000, 500))
+    }
 }
