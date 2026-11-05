@@ -76,7 +76,13 @@ class AmazonPanel(private val svc: AccessibilityService) {
         }
         if (now - lastScanAt < 700) return
         lastScanAt = now
-        val found = root?.let { findAsin(pkg, it) }
+        // 前面のブラウザーの窓を全部見る（お知らせの窓が前にあると、ページの窓が前面の根にならない）
+        val roots = listOf(root) + try {
+            svc.windows.filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+                .mapNotNull { it.root }.filter { it.packageName?.toString() == pkg && it != root }
+        } catch (_: Exception) { emptyList() }
+        var found: String? = null
+        for (r in roots) { found = findAsin(pkg, r); if (found != null) break }
         if (found != null) {
             lastSeenAt = now
             show(found, pkg)
