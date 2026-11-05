@@ -97,6 +97,7 @@ class OverlayService : Service() {
     private var statusDot: View? = null
     private var tapCount = 0
     private var lastTapAt = 0L
+    private var waitedForRecovery = 0
     private var lastTapX = -9999f
     private var lastTapY = -9999f
     private var zoneEditMode = false
@@ -617,7 +618,22 @@ class OverlayService : Service() {
      */
     /** 音量キー2回押しなどからの起動。押すたびに開始 → 確定 のトグル */
     private fun onExternalTrigger() {
-        if (isRecording) stopRecording() else startRecording(feedback = false)
+        if (isRecording) { stopRecording(); return }
+        if (VoiceRecorder.recovering && waitedForRecovery < 40) {
+            // 落ちた録音の書き起こしが終わるまで待つ（最大8秒）
+            waitedForRecovery++
+            mainHandler.postDelayed({ onExternalTrigger() }, 200)
+            return
+        }
+        waitedForRecovery = 0
+        val lost = VoiceRecorder.takeInterrupted()
+        if (lost != null) {
+            // 落ちる前の録音を確定する操作だったので、新しい録音は始めない
+            buzz(20, 60, 20)
+            copyAndPaste(lost)
+            return
+        }
+        startRecording(feedback = false)
     }
 
     private fun onEdgeTap(reset: Boolean) {
@@ -744,6 +760,7 @@ class OverlayService : Service() {
 
     private fun removeAllViews() {
         stopLevelMeter()
+        removeBarGrab()
         detachStrips()
         watcherView?.let { v -> try { wm.removeView(v) } catch (_: Exception) {} }
         watcherView = null
@@ -924,6 +941,7 @@ class OverlayService : Service() {
             updateZoneVisual()
             startLevelMeter()
             updateNotification(true)
+            addBarGrab()
             buzz(40)
             showStatus(if (feedback) "feedback" else "rec")
         }
@@ -931,6 +949,7 @@ class OverlayService : Service() {
 
     private fun stopRecording() {
         isRecording = false
+        removeBarGrab()
         val wasFeedback = isFeedback
         isFeedback = false
         micButton.setBackgroundResource(R.drawable.mic_button_background)
@@ -960,6 +979,7 @@ class OverlayService : Service() {
     private fun cancelRecording() {
         if (!isRecording) return
         isRecording = false
+        removeBarGrab()
         isFeedback = false
         micButton.setBackgroundResource(R.drawable.mic_button_background)
         micButton.imageTintList = ColorStateList.valueOf(gold)
@@ -1062,6 +1082,54 @@ class OverlayService : Service() {
         statusText = null
         statusDot = line
         try { wm.addView(line, params) } catch (_: Exception) { statusView = null }
+    }
+
+    // ==================== 録音中の緑のバーを長押しで取り消し ====================
+    // バーは 3dp で指では押せないので、録音中だけバーの真下（上端中央、幅 160dp・ステータスバーの下 36dp）に透明の受け口を置く。
+    // ステータスバーの高さの分は Android のステータスバーが上に重なって触れないので、その下まで伸ばす。
+    // 0.5 秒押し続けたら取り消し（喋った内容は履歴に残る）。音量キー2回押しの代わり（2026-11-05）
+    private var barGrab: View? = null
+
+    private fun addBarGrab() {
+        if (barGrab != null) return
+        val v = View(this)
+        val params = WindowManager.LayoutParams(
+            (density * 160).toInt(), statusBarHeight() + (density * 36).toInt(),
+            overlayType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = 0
+        }
+        val hold = Runnable {
+            if (isRecording) {
+                cancelRecording()
+                flashStatus("idle")
+            }
+        }
+        v.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> mainHandler.postDelayed(hold, 500)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> mainHandler.removeCallbacks(hold)
+            }
+            true
+        }
+        try { wm.addView(v, params); barGrab = v } catch (_: Exception) {}
+    }
+
+    @Suppress("DiscouragedApi", "InternalInsetResource")
+    private fun statusBarHeight(): Int {
+        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) resources.getDimensionPixelSize(id) else (density * 24).toInt()
+    }
+
+    private fun removeBarGrab() {
+        val v = barGrab ?: return
+        barGrab = null
+        try { wm.removeView(v) } catch (_: Exception) {}
     }
 
     /** 使用中に文字は出さない方針。残っていた経路はログだけにする（駿平 2026-08-13） */

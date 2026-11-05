@@ -37,6 +37,24 @@ class VoiceRecorder(private val ctx: Context) {
          * プロセス起動後いちばん早い可靠な入口から呼ぶ。
          * 残っている録音は履歴にだけ入れる。挿入も自動送信もしない。
          */
+        /**
+         * 録音中に VIT が落ちて（更新・強制終了）履歴にだけ入れた文と、その時刻。
+         * 駿平さんは落ちたことを知らないので、次のジェスチャーは「確定」のつもり。
+         * その1回は新しい録音を始めず、この文を入れる（2026-11-05「確定しようとしたら新しい録音が始まる」）。
+         */
+        @Volatile
+        var interrupted: Pair<String, Long>? = null
+
+        /** 落ちた録音を書き起こし中（終わるまでジェスチャーの意味が決まらない） */
+        @Volatile
+        var recovering = false
+
+        fun takeInterrupted(maxAgeMs: Long = 10 * 60_000L): String? {
+            val v = interrupted ?: return null
+            interrupted = null
+            return if (System.currentTimeMillis() - v.second <= maxAgeMs) v.first else null
+        }
+
         fun recoverFrom(ctx: Context) {
             if (busyPaths.isNotEmpty()) return
             VoiceRecorder(ctx).recoverPending()
@@ -376,6 +394,7 @@ class VoiceRecorder(private val ctx: Context) {
                 withContext(Dispatchers.Main) { onResult(text) }
             } else {
                 android.util.Log.d("VIT", "recovery history only, no insert")
+                interrupted = text to System.currentTimeMillis()
                 withContext(Dispatchers.Main) { onResult(null) }
             }
             return
@@ -430,12 +449,17 @@ class VoiceRecorder(private val ctx: Context) {
             return
         }
         if (!beginRecovery()) return
+        recovering = true
         scope.launch {
-            finishTranscript(
-                file, st.startMs, VoiceGate.voicedMs(st.amps),
-                insertReady = false,
-                onResult = {}
-            )
+            try {
+                finishTranscript(
+                    file, st.startMs, VoiceGate.voicedMs(st.amps),
+                    insertReady = false,
+                    onResult = {}
+                )
+            } finally {
+                recovering = false
+            }
         }
     }
 

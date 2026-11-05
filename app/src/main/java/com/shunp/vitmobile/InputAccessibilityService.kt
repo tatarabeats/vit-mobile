@@ -602,16 +602,23 @@ class InputAccessibilityService : AccessibilityService() {
     /**
      * 音量ダウン2回押しでも録音を起動できるようにする（設定でONの時だけ）。
      * 画面のタッチは絶対に奪わない方針なので、ダブルタップが効かない端末の逃げ道はここ。
-     * イベントは消費しない（false を返す）ので、音量そのものは普通に変わる。
+     * 録音中だけイベントを消費するので、音量は変わらない。録音していない時は普通に音量が変わる。
      */
     override fun onKeyEvent(event: android.view.KeyEvent?): Boolean {
         val e = event ?: return false
-        if (e.action != android.view.KeyEvent.ACTION_DOWN) return false
         if (e.keyCode != android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return false
+        // 押した時に録音中なら、離した時も消費する（片方だけ渡すと音量が変わることがある）
+        if (e.action == android.view.KeyEvent.ACTION_UP) {
+            val eat = volDownEaten
+            volDownEaten = false
+            return eat
+        }
+        if (e.action != android.view.KeyEvent.ACTION_DOWN) return false
         // 録音中は設定に関係なく「取り消し」に使う（ジェスチャー枠を消費しない取り消し手段）
         // 音量キーでの「起動」は廃止。録音中の取り消しだけ受ける（2026-08-14）
         val recording = OverlayService.isRecordingNow
         if (!recording) return false
+        // 録音中の音量下キーは取り消し専用にして、音量は変えない（イベントを消費する。2026-11-05）
         val now = System.currentTimeMillis()
         if (now - lastVolKeyAt in 1..450) {
             lastVolKeyAt = 0
@@ -624,8 +631,11 @@ class InputAccessibilityService : AccessibilityService() {
         } else {
             lastVolKeyAt = now
         }
-        return false
+        volDownEaten = true
+        return true
     }
+
+    private var volDownEaten = false
 
     private val handler by lazy { android.os.Handler(mainLooper) }
 
