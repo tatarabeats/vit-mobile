@@ -43,6 +43,13 @@ class AmazonPanel(private val svc: AccessibilityService) {
         fun asinFromUrl(s: CharSequence?): String? =
             s?.let { ASIN_IN_URL.find(it)?.groupValues?.get(1)?.uppercase() }
 
+        /** アドレスバーの文字から、商品ページを離れたと言えるか（テスト用に公開） */
+        fun shouldHideFor(bar: String): Boolean {
+            if (!bar.contains("amazon.co.jp", ignoreCase = true)) return bar.isNotEmpty()
+            val path = bar.substringAfter("amazon.co.jp", "")
+            return path.length > 1 && asinFromUrl(bar) == null
+        }
+
         fun graphUrl(asin: String) =
             "https://graph.keepa.com/pricehistory.png?asin=$asin&domain=co.jp&range=365&width=800&height=360&amazon=1&new=1&used=1"
         fun sakuraUrl(asin: String) = "https://sakura-checker.jp/search/$asin/"
@@ -63,7 +70,7 @@ class AmazonPanel(private val svc: AccessibilityService) {
     private var collapsed = false
     private var dismissedAsin: String? = null
     private var lastScanAt = 0L
-    private var lastSeenAt = 0L
+    private var lastBar: String? = null
 
     /** ユーザー補助のイベントのたびに呼ぶ（間引きはこちらでする） */
     fun onEvent(root: AccessibilityNodeInfo?) {
@@ -82,13 +89,16 @@ class AmazonPanel(private val svc: AccessibilityService) {
                 .mapNotNull { it.root }.filter { it.packageName?.toString() == pkg && it != root }
         } catch (_: Exception) { emptyList() }
         var found: String? = null
+        lastBar = null
         for (r in roots) { found = findAsin(pkg, r); if (found != null) break }
         if (found != null) {
-            lastSeenAt = now
             show(found, pkg)
-        } else if (now - lastSeenAt > 2500) {
-            // 2.5 秒続けて商品ページの印が見えなければ、別のページに移ったとみなす
-            hide()
+        } else {
+            // 商品ページの印が見えないだけでは隠さない（お知らせの窓・読み込み中など）。
+            // アドレスバーが読めて、Amazon 以外か、Amazon の商品ではないページ（検索結果など）になった時だけ隠す。
+            // ドメインだけの表示（amazon.co.jp）の時は判断できないので出したままにする
+            val bar = lastBar?.trim()
+            if (bar != null && asin != null && shouldHideFor(bar)) hide()
         }
     }
 
@@ -98,6 +108,7 @@ class AmazonPanel(private val svc: AccessibilityService) {
         try {
             for (n in root.findAccessibilityNodeInfosByViewId("$pkg:id/url_bar")) {
                 bar = n.text?.toString()
+                lastBar = bar
                 asinFromUrl(n.text)?.let { log("asin=$it from url_bar"); return it }
             }
         } catch (_: Exception) {}

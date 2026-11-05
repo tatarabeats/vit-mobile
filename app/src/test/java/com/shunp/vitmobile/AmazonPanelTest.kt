@@ -22,4 +22,11 @@ class AmazonPanelTest {
         assertEquals("https://sakura-checker.jp/search/B07WXL5YPW/", AmazonPanel.sakuraUrl("B07WXL5YPW"))
         assertEquals("https://keepa.com/#!product/5-B07WXL5YPW", AmazonPanel.keepaUrl("B07WXL5YPW"))
     }
+
+    @Test fun hideRules() {
+        assertEquals(false, AmazonPanel.shouldHideFor("amazon.co.jp"))
+        assertEquals(false, AmazonPanel.shouldHideFor("https://www.amazon.co.jp/dp/B07WXL5YPW"))
+        assertEquals(true, AmazonPanel.shouldHideFor("https://www.amazon.co.jp/s?k=switch"))
+        assertEquals(true, AmazonPanel.shouldHideFor("google.com"))
+    }
 }
