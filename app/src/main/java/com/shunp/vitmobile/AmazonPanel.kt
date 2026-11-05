@@ -175,6 +175,7 @@ class AmazonPanel(private val svc: AccessibilityService) {
     }
 
     private fun removeViews() {
+        if (panel != null || chip != null) log("remove views asin=$asin")
         panel?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         chip?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         panel = null
@@ -186,7 +187,7 @@ class AmazonPanel(private val svc: AccessibilityService) {
         w, h, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
         PixelFormat.TRANSLUCENT
-    ).apply { this.gravity = gravity; this.x = x; this.y = y }
+    ).apply { this.gravity = gravity; this.x = x; this.y = y; title = "VIT-Amazon" }
 
     private fun dp(v: Int) = (v * density).toInt()
 

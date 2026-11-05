@@ -52,8 +52,10 @@ jobs:
             adb shell uiautomator dump /sdcard/ui0.xml || true
             B=$(adb shell cat /sdcard/ui0.xml | grep -o 'text="No thanks"[^>]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' | grep -o 'bounds=.*' | grep -o '[0-9]\+' | xargs)
             if [ -n "$B" ]; then set -- $B; adb shell input tap $(( ($1+$3)/2 )) $(( ($2+$4)/2 )); fi
-            sleep 6
+            for i in $(seq 1 30); do adb shell run-as com.shunp.vitmobile cat files/amazon.log 2>/dev/null | grep -q "panel shown" && break; sleep 1; done
+            sleep 3
             adb exec-out screencap -p > shot-amazon-1.png
+            adb shell dumpsys window windows | grep -n "VIT-Amazon\|vitmobile" || true
             adb shell input swipe 160 500 160 250 300
             sleep 8
             adb exec-out screencap -p > shot-amazon-2.png
