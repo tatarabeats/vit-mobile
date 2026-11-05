@@ -28,6 +28,20 @@ object Hallucination {
         RegexOption.IGNORE_CASE
     )
 
+    /** 黙っている時に Whisper が出す動画の締めの句（PC版 FORBIDDEN_OUTRO_PATTERNS） */
+    private val OUTRO = Regex(
+        "ご視聴(?:いただき|くださり)?ありがとう(?:ございます|ございました|ございまし(?:た|て))|" +
+        "最後まで(?:ご視聴)?(?:いただき)?ありがとう(?:ございます|ございました|ございまし(?:た|て))|" +
+        "ご清聴ありがとう(?:ございます|ございました|ございまし(?:た|て))|" +
+        "チャンネル登録(?:と高評価)?(?:を?)?(?:よろしく)?お願い(?:します|致します|いたします)|" +
+        "高評価(?:とチャンネル登録)?(?:を?)?(?:よろしく)?お願い(?:します|致します|いたします)|" +
+        "thank you for watching|thanks for watching|please subscribe|see you next time",
+        RegexOption.IGNORE_CASE
+    )
+    private val PUNCT = charArrayOf(' ', '　', '。', '、', ',', '.', '！', '!', '？', '?', '・')
+    /** 「ご視聴ありがとうございました」を本当に言うと1秒以上かかる */
+    private const val OUTRO_SPOKEN_MS = 1000L
+
     private val TRAILING = Regex(
         "[。、,.\\s]*(?:ありがとうございました|ありがとうございます|お疲れ様でした|おやすみなさい|お待ちしており?ます|次回もよろしくお願いします)[。.]*$"
     )
@@ -39,6 +53,12 @@ object Hallucination {
      */
     fun filter(text: String, durationMs: Long = 0, clearMs: Long = 800): String {
         if (text.isBlank()) return text
+        // 話した後に黙っていた部分の「ご視聴ありがとうございました」は、声の長さに関係なく消す（PC版 _strip_forbidden_outro と同じ。2026-11-05）
+        // その句だけで、声が OUTRO_SPOKEN_MS 以上ある時は、本当に言ったとみなして残す
+        val outroOnly = OUTRO.replace(text, "").trim(*PUNCT).isEmpty()
+        if (outroOnly) return if (durationMs >= OUTRO_SPOKEN_MS) text else ""
+        val stripped = OUTRO.replace(text, "").trim(*PUNCT)
+        if (stripped != text.trim()) return filter(stripped, durationMs, clearMs)
         val isClearSpeech = durationMs >= clearMs
         if (isClearSpeech) return text
 
