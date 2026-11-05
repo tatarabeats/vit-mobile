@@ -286,7 +286,8 @@ class InputAccessibilityService : AccessibilityService() {
         val e = event ?: return
         // Amazon の商品ページに Keepa のグラフとさくらチェッカーを出す（ブラウザーの書き換えと、前面アプリの切り替えの時だけ見る）
         val ep = e.packageName?.toString()
-        if (ep in AmazonPanel.BROWSERS || e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        // 2026-11-05 駿平さん「邪魔なポップアップが出てるだけ」→ 重ね表示はやめる（ページの中に出すのはブラウザーの拡張機能で行う）
+        if (AmazonPanel.ENABLED && (ep in AmazonPanel.BROWSERS || e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)) {
             try { amazonPanel.onEvent(findAppRoot()) } catch (_: Exception) {}
         }
         if (e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED

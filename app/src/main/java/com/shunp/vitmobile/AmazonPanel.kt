@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit
  */
 class AmazonPanel(private val svc: AccessibilityService) {
     companion object {
+        const val ENABLED = false
         val BROWSERS = setOf(
             "com.brave.browser", "com.android.chrome", "com.sec.android.app.sbrowser",
             "com.microsoft.emmx", "org.mozilla.firefox"
