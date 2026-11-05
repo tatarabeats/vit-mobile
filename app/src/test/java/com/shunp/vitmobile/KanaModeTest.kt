@@ -19,6 +19,15 @@ class KanaModeTest {
         assertEquals(KanaMode.Kind.HIRAGANA, KanaMode.detect("ひらがなだけで入力して東京")!!.kind)
     }
 
+    @Test fun detectsAfterSentenceEnd() {
+        val r = KanaMode.detect("これはテストですカタカナでyoutube.com")!!
+        assertEquals(KanaMode.Kind.KATAKANA, r.kind)
+        assertEquals("これはテストです", r.head)
+        assertEquals("youtube.com", r.rest)
+        assertNull(KanaMode.detect("全然カタカナになんないし"))
+        assertNull(KanaMode.detect("この文はカタカナでいいよ"))
+    }
+
     @Test fun ordinarySentencesAreNotCommands() {
         assertNull(KanaMode.detect("ひらがなでいいよ"))
         assertNull(KanaMode.detect("ひらがなでも書けるよ"))

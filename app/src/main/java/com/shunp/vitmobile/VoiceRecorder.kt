@@ -448,7 +448,7 @@ class VoiceRecorder(private val ctx: Context) {
         val base = if (!read.isNullOrBlank() && !KanaMode.hasKanji(read)) read else req.rest
         val out = KanaMode.normalize(req.kind, base)
         android.util.Log.d("VIT", "kana ${req.kind}: ${req.rest.length} chars, llm=${base === read}")
-        return out
+        return req.head + out
     }
 
     /**

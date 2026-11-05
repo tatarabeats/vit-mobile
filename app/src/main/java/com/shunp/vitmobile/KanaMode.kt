@@ -8,10 +8,13 @@ package com.shunp.vitmobile
 object KanaMode {
     enum class Kind { HIRAGANA, KATAKANA }
 
-    data class Request(val kind: Kind, val rest: String)
+    /** head = 「ひらがなで」より前（そのまま残す）、rest = 後ろ（変換する） */
+    data class Request(val kind: Kind, val rest: String, val head: String = "")
 
+    // 文の頭だけでなく、句読点・空白・「です」「ます」などの文末の直後でも効く（PC版と同じ。2026-11-05）
     private val PREFIX = Regex(
-        "^\\s*(ひらがな|平仮名|ヒラガナ|カタカナ|片仮名|かたかな)(?:だけ|のみ)?で" +
+        "(?:^|(?<=[。、！？!?,.\\s　])|(?<=です)|(?<=ます)|(?<=でした)|(?<=ました)|(?<=だよ)|(?<=だね)|(?<=だ))" +
+        "\\s*(ひらがな|平仮名|ヒラガナ|カタカナ|片仮名|かたかな)(?:だけ|のみ)?で" +
             "(?:入力して|入力|書いて|して)?[、,。.\\s　]*"
     )
 
@@ -21,11 +24,13 @@ object KanaMode {
     )
 
     fun detect(text: String): Request? {
-        val m = PREFIX.find(text) ?: return null
-        val rest = text.substring(m.range.last + 1)
-        if (rest.isBlank() || NOT_COMMAND.containsMatchIn(rest)) return null
-        val kind = if (m.groupValues[1] in setOf("ひらがな", "平仮名", "ヒラガナ")) Kind.HIRAGANA else Kind.KATAKANA
-        return Request(kind, rest)
+        for (m in PREFIX.findAll(text)) {
+            val rest = text.substring(m.range.last + 1)
+            if (rest.isBlank() || NOT_COMMAND.containsMatchIn(rest)) continue
+            val kind = if (m.groupValues[1] in setOf("ひらがな", "平仮名", "ヒラガナ")) Kind.HIRAGANA else Kind.KATAKANA
+            return Request(kind, rest, text.substring(0, m.range.first))
+        }
+        return null
     }
 
     fun toHiragana(s: String): String =
