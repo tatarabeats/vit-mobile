@@ -375,7 +375,7 @@ class InputAccessibilityService : AccessibilityService() {
         }
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                sidebarSwipe.begin(event.rawX, event.rawY)
+                sidebarSwipe.begin(event.rawX, event.rawY, resources.displayMetrics.widthPixels.toFloat())
                 OverlayService.updateSidebarProgress(0f)
             }
             MotionEvent.ACTION_MOVE -> OverlayService.updateSidebarProgress(

@@ -127,7 +127,10 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                     // その間の縦の揺れで Claude のチャットが動いてしまう（2026-10-08 駿平さん）
                     // 感度を上げた（2026-10-08 駿平さん「明らかに横なのに縦にスクロールされる」）。
                     // 早く決めるほど、縦の揺れで Claude のチャットが動く前に一覧が出る
-                    val early = !lifted && elapsed in 0L..350L && cooled
+                    // 画面の左のいちばん端から始めたスワイプは One Hand Operation+ の操作なので開かない
+                    // （2026-11-05 駿平さん。実測: ワンハンドの操作は x=17 から始まっていた）
+                    val fromEdge = startX!! < display.width * SwipeEdge.FRACTION
+                    val early = !fromEdge && !lifted && elapsed in 0L..350L && cooled
                         && dx >= display.width * 0.06f
                         && dx >= maxAbsDy * 2.0f
                         && maxAbsDy < display.height * 0.05f
@@ -156,7 +159,7 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         val arc = dx >= display.width * 0.12f
                             && dx >= maxAbsDy
                             && maxAbsDy < display.height * 0.22f
-                        val ok = time - startTime in 0L..(if (straight) 700L else 1400L)
+                        val ok = !fromEdge && time - startTime in 0L..(if (straight) 700L else 1400L)
                             && (straight || arc)
                             && minDx > -display.width * 0.03f
                             && (lastFire == null || time - lastFire!! >= 300)

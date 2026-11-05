@@ -8,10 +8,11 @@ internal class RightSwipeTracker(private val threshold: Float) {
     private var startY = 0f
     private var tracking = false
 
-    fun begin(x: Float, y: Float) {
+    fun begin(x: Float, y: Float, screenWidth: Float = 0f) {
         startX = x
         startY = y
-        tracking = true
+        // 左のいちばん端から始めた時は追わない（One Hand Operation+ の操作。SwipeEdge）
+        tracking = !(screenWidth > 0f && x < screenWidth * SwipeEdge.FRACTION)
     }
 
     fun progress(x: Float, y: Float): Float {

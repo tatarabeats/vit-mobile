@@ -65,6 +65,18 @@ class GeteventSwipeParserTest {
         assertNull(TouchDeviceDiscovery.parse(listing.replace("max 4095", "max 0")))
     }
 
+    @Test fun swipeFromVeryLeftEdgeIsOneHandOperationNotMenu() {
+        // ワンハンドの操作は x=17/1080（生の値 64）から始まる。同じ動きでも端からなら開かない（2026-11-05）
+        val s = Stream(device)
+        s.down(x = 64)
+        s.time += 100
+        assertFalse(s.finish(64 + 900))
+        s.time += 1000
+        s.down(x = 1000)
+        s.time += 100
+        assertTrue(s.finish(1000 + 900))
+    }
+
     @Test fun twelvePercentThresholdOnLiftAfterEarlyWindow() {
         // 途中判定は 450ms まで。それを過ぎたら離した時に 12% で判定する
         val s = Stream(device)
