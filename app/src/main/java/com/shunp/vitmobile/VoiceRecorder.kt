@@ -435,7 +435,20 @@ class VoiceRecorder(private val ctx: Context) {
             val fixed = llmFix(text)
             if (!fixed.isNullOrBlank()) text = fixed
         }
+        KanaMode.detect(text)?.let { req -> text = kanaConvert(req) }
         return text
+    }
+
+    /** 「ひらがなで」「カタカナで」の後ろを、読みのとおりにひらがな／カタカナだけにする（KanaMode） */
+    private fun kanaConvert(req: KanaMode.Request): String {
+        val read = if (llmAvailable()) {
+            llmChat(KanaMode.SYSTEM_PROMPT, KanaMode.EXAMPLES, req.rest,
+                maxOf(256, minOf(2000, req.rest.length * 4 + 100)))
+        } else null
+        val base = if (!read.isNullOrBlank() && !KanaMode.hasKanji(read)) read else req.rest
+        val out = KanaMode.normalize(req.kind, base)
+        android.util.Log.d("VIT", "kana ${req.kind}: ${req.rest.length} chars, llm=${base === read}")
+        return out
     }
 
     /**
