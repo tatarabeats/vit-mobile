@@ -169,6 +169,7 @@ class AmazonPanel(private val svc: AccessibilityService) {
 
     fun hide() {
         if (panel == null && chip == null) return
+        log("hide asin=$asin")
         removeViews()
         asin = null
     }
@@ -230,7 +231,8 @@ class AmazonPanel(private val svc: AccessibilityService) {
         try {
             wm.addView(box, params(w, WindowManager.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, 0, dp(64)))
             panel = box
-        } catch (_: Exception) {}
+            log("panel shown asin=$a")
+        } catch (e: Exception) { log("panel failed: ${e.javaClass.simpleName} ${e.message}") }
     }
 
     private fun addChip() {
@@ -261,6 +263,7 @@ class AmazonPanel(private val svc: AccessibilityService) {
             } catch (_: Exception) { null }
             main.post {
                 if (bmp != null) { cachedBitmap = bmp; cachedFor = a }
+                log(if (bmp != null) "graph loaded ${bmp.width}x${bmp.height}" else "graph failed")
                 if (asin == a && bmp != null) image?.setImageBitmap(bmp)
             }
         }.start()
