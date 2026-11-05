@@ -140,7 +140,9 @@ class VoiceRecorder(private val ctx: Context) {
             // PC 版と同じ基準（2026-11-05）: 評価が極端に悪い区間と、6文字以上で -1.0 未満の区間は、
             // 黙っている間（動画の音など）のでたらめな文なので捨てる
             val compactLen = t.count { !it.isWhitespace() && it !in "。、,.!！?？・" }
-            if (avgLp < -2.0 || (avgLp < -1.0 && compactLen >= 6)) {
+            // 黙っている所に Whisper が作る「おわり」だけの区間も捨てる（PC 版と同じ。2026-11-05 実測 -1.17〜-1.34）
+            val owari = t.trim().trim('。', '、', '.', '!', '！', '?', '？') in setOf("おわり", "終わり", "オワリ")
+            if (avgLp < -2.0 || (avgLp < -1.0 && compactLen >= 6) || (owari && avgLp < -0.9)) {
                 android.util.Log.d("VIT", "drop low-confidence segment ($avgLp): $t")
                 continue
             }
