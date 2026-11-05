@@ -57,6 +57,8 @@ jobs:
             adb shell input swipe 160 500 160 250 300
             sleep 8
             adb exec-out screencap -p > shot-amazon-2.png
+            adb shell dumpsys window windows > windows.txt || true
+            grep -n -A12 "vitmobile" windows.txt | grep -E "Window\{|mFrame|frame=|isVisible|mViewVisibility|mHasSurface|ty=|type=" | head -40 || true
             adb shell run-as com.shunp.vitmobile cat files/amazon.log > amazon.log || true
             echo "---- amazon.log ----"; cat amazon.log || true
             adb shell uiautomator dump /sdcard/ui.xml || true
@@ -73,3 +75,4 @@ jobs:
             amazon.log
             ui.xml
             logcat.txt
+            windows.txt
