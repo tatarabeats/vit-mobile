@@ -280,8 +280,15 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     /** フォーカスイベントを常時監視して、最後にフォーカスされた入力欄を記憶 */
+    private val amazonPanel by lazy { AmazonPanel(this) }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val e = event ?: return
+        // Amazon の商品ページに Keepa のグラフとさくらチェッカーを出す（ブラウザーの書き換えと、前面アプリの切り替えの時だけ見る）
+        val ep = e.packageName?.toString()
+        if (ep in AmazonPanel.BROWSERS || e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            try { amazonPanel.onEvent(findAppRoot()) } catch (_: Exception) {}
+        }
         if (e.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             || e.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
             updateSidebarForeground(sidebarWindowPackage())
