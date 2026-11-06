@@ -39,6 +39,11 @@ android {
         }
     }
 
+    // Kuromoji の2つの jar に同じ説明ファイルが入っていて、まとめる時にぶつかる（中身は使わない）
+    packaging {
+        resources.excludes += setOf("META-INF/CONTRIBUTORS.md", "META-INF/LICENSE.md", "META-INF/NOTICE.md")
+    }
+
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debug")
