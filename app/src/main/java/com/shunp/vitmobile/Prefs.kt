@@ -287,6 +287,17 @@ object Prefs {
                 return value
             }
         }
+        // 書き方が違っても、読みが同じなら同じ言葉とみなす（辞書と同じ。2026-11-06 駿平さん「置き換えも一緒だよ」）
+        val spoken = try { KanaMode.toHiragana(Reading.toKatakana(trimmed)) } catch (_: Throwable) { return recognized }
+        if (spoken.length < 2) return recognized
+        for (line in snippets.lines()) {
+            val parts = line.split("|", limit = 2)
+            if (parts.size != 2) continue
+            val key = parts[0].trim().trimEnd('。')
+            if (key.isEmpty()) continue
+            val keyRead = try { KanaMode.toHiragana(Reading.toKatakana(key)) } catch (_: Throwable) { continue }
+            if (keyRead == spoken) return parts[1].trim()
+        }
         return recognized
     }
 
