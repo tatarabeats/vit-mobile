@@ -225,9 +225,15 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                                 parser.lastLeftSwipe = null
                                 main.post {
                                     if (!owner.isClaudeForegroundForShizuku()) return@post
-                                    // 表・グラフを左へ送った。次の右なぞりは、送った分を戻す操作として1回だけ開かずに通す
+                                    // 表・グラフを左へ送った。次の右なぞりは、送った分を戻す操作として1回だけ開かずに通す。
+                                    // 戻す分は1回だけ（足し上げない）。メニューを閉じる左なぞり（開いて3秒以内）は数えない
+                                    // （2026-11-06 駿平さん「長文を送って Claude が考えている画面で小さくスワイプしても全く動かない」:
+                                    // メニューを閉じる左なぞりのたびに「グラフを送った」と数え、戻す分が 89 回まで溜まって、
+                                    // 部品の無い所での右なぞりを 88 回続けて捨てていた）
+                                    if (lastFire?.let { SystemClock.uptimeMillis() - it < 3000 } == true) return@post
+                                    if (owner.openClaudeSidebar(checkOnly = true)) return@post  // メニューが開いている＝閉じる操作
                                     InputAccessibilityService.horizontalScrollerAt(lx.toInt(), ly.toInt())?.let {
-                                        scrolledLeft[it] = (scrolledLeft[it] ?: 0) + 1
+                                        scrolledLeft[it] = 1
                                         scrolledAt = SystemClock.uptimeMillis()
                                         log("scroller moved left ($it) credit=${scrolledLeft[it]}")
                                     }
@@ -253,7 +259,9 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                                     // 同じ部品 984x380 の上の右なぞりが7回続けて捨てられていた）。
                                     // 表は最初は左端にあり、右になぞっても動かない。左へ送った後だけ戻す余地がある
                                     InputAccessibilityService.horizontalScrollerAt(parser.lastStartX.toInt(), parser.lastStartY.toInt())?.let {
-                                        if (current - scrolledAt > 120_000) scrolledLeft.clear()
+                                        // 戻す分は、表なら2分、部品の無い所（グラフと推定）なら15秒で忘れる
+                                        val keep = if (it.startsWith("no-node")) 15_000 else 120_000
+                                        if (current - scrolledAt > keep) scrolledLeft.clear()
                                         val credit = scrolledLeft[it] ?: 0
                                         if (credit > 0) {
                                             scrolledLeft[it] = credit - 1
