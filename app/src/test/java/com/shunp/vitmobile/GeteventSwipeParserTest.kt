@@ -77,6 +77,24 @@ class GeteventSwipeParserTest {
         assertTrue(s.finish(1000 + 900))
     }
 
+    @Test fun leftSwipeIsReportedBeforeLift() {
+        // メニューを閉じる左なぞりは、指を離す前に知らせる（離すと Claude が指の下のスレッドを開くため。2026-11-06）
+        val s = Stream(device)
+        s.down(x = 3000)
+        s.time += 60
+        s.move(3000 - 400)
+        assertNotNull(s.parser.earlyLeft)
+        s.parser.earlyLeft = null
+        s.move(3000 - 800)
+        assertNull(s.parser.earlyLeft) // 1回のなぞりで1回だけ
+        s.up()
+        s.time += 1000
+        s.down(x = 1000)
+        s.time += 60
+        s.move(1400)
+        assertNull(s.parser.earlyLeft) // 右なぞりでは出ない
+    }
+
     @Test fun twelvePercentThresholdOnLiftAfterEarlyWindow() {
         // 途中判定は 450ms まで。それを過ぎたら離した時に 12% で判定する
         val s = Stream(device)

@@ -56,6 +56,9 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
     var lastGesture: String? = null
     /** 左へ横になぞった時の開始位置（表・グラフを左へ送ったかの記録用）。読んだ側が null に戻す */
     var lastLeftSwipe: Pair<Float, Float>? = null
+    /** 指を離す前に左なぞりと分かった時の開始位置（メニューを閉じる操作に使う。2026-11-06） */
+    var earlyLeft: Pair<Float, Float>? = null
+    private var earlyLeftFired = false
     private var startDisplay: SwipeDisplay? = null
     private var blocked = false
     private var lifted = false
@@ -114,7 +117,7 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         .toFloat() / device.maxX * display.width
                     val y = (if (display.rotation == 2) device.maxY - rawY else rawY)
                         .toFloat() / device.maxY * display.height
-                    if (startX == null) { startX = x; startY = y; maxAbsDy = 0f; minDx = 0f; maxDx = 0f }
+                    if (startX == null) { startX = x; startY = y; maxAbsDy = 0f; minDx = 0f; maxDx = 0f; earlyLeftFired = false }
                     val dx = x - startX!!
                     val dy = y - startY!!
                     // 途中の縦の動きも見る。上下スクロールの最後に指が右へ流れただけで開いていた（2026-10-08）
@@ -135,6 +138,14 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         && dx >= maxAbsDy * 2.0f
                         && maxAbsDy < display.height * 0.05f
                         && minDx > -display.width * 0.03f
+                    // メニューを閉じる左なぞりも、指を離す前に決める。離してからだと、Claude が指の下のスレッドを
+                    // 押したことにして、指の位置によって別のスレッドが開いていた（2026-11-06 駿平さん「常に直前に開いてたやつに戻るようにしたい」）
+                    if (!earlyLeftFired && !lifted && elapsed in 0L..350L
+                        && dx <= -display.width * 0.06f && -dx >= maxAbsDy * 2.0f
+                        && maxAbsDy < display.height * 0.05f && maxDx < display.width * 0.03f) {
+                        earlyLeftFired = true
+                        earlyLeft = (startX ?: -1f) to (startY ?: -1f)
+                    }
                     if (early) {
                         lastGesture = "early dx=${dx.toInt()} maxDy=${maxAbsDy.toInt()} ms=$elapsed"
                         lastDirection = 1

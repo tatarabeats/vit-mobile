@@ -221,6 +221,19 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                                 parser.lastGesture = null
                                 if (owner.sidebarForegroundPackage == InputAccessibilityService.CLAUDE_PACKAGE) log("gesture $it")
                             }
+                            parser.earlyLeft?.let {
+                                parser.earlyLeft = null
+                                main.post {
+                                    if (!owner.isClaudeForegroundForShizuku()) return@post
+                                    // メニューが開いている時の左なぞりは、戻るボタンでメニューを閉じて直前のスレッドへ戻す。
+                                    // Claude に任せると、指の下のスレッドが押されたことになり、別のスレッドが開いていた（2026-11-06）
+                                    if (owner.openClaudeSidebar(checkOnly = true)) {
+                                        val ok = owner.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                                        lastFire = SystemClock.uptimeMillis()
+                                        log("left swipe on open menu -> back (close menu) ok=$ok")
+                                    }
+                                }
+                            }
                             parser.lastLeftSwipe?.let { (lx, ly) ->
                                 parser.lastLeftSwipe = null
                                 main.post {
