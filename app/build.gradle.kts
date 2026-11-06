@@ -15,8 +15,8 @@ android {
         //  2) Android 12 の「他アプリ上の ACTION_OUTSIDE 座標を隠す」制限を避け、
         //     起動ゾーンの位置判定に座標を使えるようにする（2026-08-12）
         targetSdk = 30
-        versionCode = 109
-        versionName = "0.9.71"
+        versionCode = 110
+        versionName = "0.9.72"
     }
 
     signingConfigs {
@@ -81,6 +81,8 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    // 日本語の読み（漢字→カタカナ）。「カタカナで」と辞書の読み合わせに使う（PC 版の Sudachi の代わり。2026-11-06）
+    implementation("com.atilika.kuromoji:kuromoji-ipadic:0.9.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

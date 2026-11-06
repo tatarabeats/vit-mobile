@@ -9,7 +9,12 @@ object KanaMode {
     enum class Kind { HIRAGANA, KATAKANA }
 
     /** head = 「ひらがなで」より前（そのまま残す）、rest = 後ろ（変換する） */
-    data class Request(val kind: Kind, val rest: String, val head: String = "")
+    data class Request(val kind: Kind, val rest: String, val head: String = "", val tail: String = "")
+
+    /** 変えるのは、文の終わり（。！？）か「って」「と言」の手前まで（2026-11-06 駿平さん:
+     *  「カタカナで見るとこって言ったら…」が、後ろの文まで全部カタカナになった） */
+    private val SPAN_END = Regex("[。！？!?
+]|って|っていう|と言|と書|とか")
 
     // 文の頭だけでなく、句読点・空白・「です」「ます」などの文末の直後でも効く（PC版と同じ。2026-11-05）
     private val PREFIX = Regex(
@@ -25,10 +30,13 @@ object KanaMode {
 
     fun detect(text: String): Request? {
         for (m in PREFIX.findAll(text)) {
-            val rest = text.substring(m.range.last + 1)
-            if (rest.isBlank() || NOT_COMMAND.containsMatchIn(rest)) continue
+            val all = text.substring(m.range.last + 1)
+            if (all.isBlank() || NOT_COMMAND.containsMatchIn(all)) continue
+            val cut = SPAN_END.find(all)?.range?.first ?: all.length
+            val rest = all.substring(0, cut)
+            if (rest.isBlank()) continue
             val kind = if (m.groupValues[1] in setOf("ひらがな", "平仮名", "ヒラガナ")) Kind.HIRAGANA else Kind.KATAKANA
-            return Request(kind, rest, text.substring(0, m.range.first))
+            return Request(kind, rest, text.substring(0, m.range.first), all.substring(cut))
         }
         return null
     }

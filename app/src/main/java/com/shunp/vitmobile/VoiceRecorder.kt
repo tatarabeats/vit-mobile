@@ -256,6 +256,7 @@ class VoiceRecorder(private val ctx: Context) {
      * 喋り終わってからの往復が握手ぶん（0.1-0.3s）短くなる。
      */
     private fun prewarm() {
+        Reading.warm()
         val key = Prefs.getGroqKey(ctx) ?: return
         scope.launch {
             try {
@@ -440,20 +441,23 @@ class VoiceRecorder(private val ctx: Context) {
             val fixed = llmFix(text)
             if (!fixed.isNullOrBlank()) text = fixed
         }
+        // 辞書のかなの言葉と読みが同じ部分を辞書の書き方に（「見るとこ」→「ミルトコ」。2026-11-06）
+        text = try { Reading.applyDictionary(text, Prefs.getDictionary(ctx).lines()) } catch (_: Throwable) { text }
         KanaMode.detect(text)?.let { req -> text = kanaConvert(req) }
         return text
     }
 
     /** 「ひらがなで」「カタカナで」の後ろを、読みのとおりにひらがな／カタカナだけにする（KanaMode） */
     private fun kanaConvert(req: KanaMode.Request): String {
-        val read = if (llmAvailable()) {
-            llmChat(KanaMode.SYSTEM_PROMPT, KanaMode.EXAMPLES, req.rest,
-                maxOf(256, minOf(2000, req.rest.length * 4 + 100)))
-        } else null
+        // 読みは端末の中の辞書（Kuromoji）で出す。AI は回数制限で失敗することがあるので、辞書が使えない時だけ使う
+        val local = try { Reading.toKatakana(req.rest) } catch (_: Throwable) { null }
+        val read = if (local != null && !KanaMode.hasKanji(local) && !local.any { it in 'A'..'Z' || it in 'a'..'z' }) local  // 英字（youtube など）が残る時は AI で
+            else if (llmAvailable()) llmChat(KanaMode.SYSTEM_PROMPT, KanaMode.EXAMPLES, req.rest,
+                maxOf(256, minOf(2000, req.rest.length * 4 + 100))) else null
         val base = if (!read.isNullOrBlank() && !KanaMode.hasKanji(read)) read else req.rest
         val out = KanaMode.normalize(req.kind, base)
-        android.util.Log.d("VIT", "kana ${req.kind}: ${req.rest.length} chars, llm=${base === read}")
-        return req.head + out
+        android.util.Log.d("VIT", "kana ${req.kind}: ${req.rest.length} chars, local=${local != null}")
+        return req.head + out + req.tail
     }
 
     /**
