@@ -9,7 +9,8 @@ class KanaModeTest {
     @Test fun detectsHiraganaPrefix() {
         val r = KanaMode.detect("ひらがなで、今日は6時です。")!!
         assertEquals(KanaMode.Kind.HIRAGANA, r.kind)
-        assertEquals("今日は6時です。", r.rest)
+        assertEquals("今日は6時です", r.rest)  // 変えるのは文の終わりの手前まで
+        assertEquals("。", r.tail)
     }
 
     @Test fun detectsKatakanaWithVerb() {
