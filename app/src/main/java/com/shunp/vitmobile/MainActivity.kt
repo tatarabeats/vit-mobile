@@ -486,6 +486,26 @@ class MainActivity : AppCompatActivity() {
         Prefs.setDictionary(this, words.joinToString("\n"))
     }
 
+    /** 追加ボタンを押したら、その入力欄を選んで、すぐキーボードを出す（2026-11-06 駿平さん。
+     *  SHOW_IMPLICIT だと出ないことがあったので、出るまで少し間を置いて2回まで試す） */
+    private fun showKeyboardFor(v: android.view.View) {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        v.requestFocus()
+        for (delay in longArrayOf(80, 300)) {
+            v.postDelayed({
+                if (!v.isAttachedToWindow) return@postDelayed
+                v.requestFocus()
+                if (!imm.isActive(v) || !imm.isAcceptingText) {
+                    @Suppress("DEPRECATION")
+                    imm.showSoftInput(v, android.view.inputmethod.InputMethodManager.SHOW_FORCED)
+                } else {
+                    imm.showSoftInput(v, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                }
+                (v.parent as? android.view.View)?.let { row -> row.requestRectangleOnScreen(android.graphics.Rect(0, 0, row.width, row.height), false) }
+            }, delay)
+        }
+    }
+
     private fun addDictionaryRow(word: String, focus: Boolean) {
         val row = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.HORIZONTAL
@@ -509,15 +529,7 @@ class MainActivity : AppCompatActivity() {
             saveDictionary()
         })
         b.dictionaryBox.addView(row)
-        if (focus) {
-            // 追加ボタンを押したら、すぐキーボードを出す（2026-11-06 駿平さん「辞書の追加ボタンを押したらすぐキーボードが開くようにしてほしい」）
-            input.requestFocus()
-            input.post {
-                input.requestFocus()
-                val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-                imm.showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
-            }
-        }
+        if (focus) showKeyboardFor(input)
     }
 
     private fun removeRowButton(description: String, remove: () -> Unit) = MaterialButton(this).apply {
@@ -592,7 +604,7 @@ class MainActivity : AppCompatActivity() {
             saveSnippets()
         })
         b.snippetsBox.addView(row)
-        if (focus) k.requestFocus()
+        if (focus) showKeyboardFor(k)
     }
 
     // ==================== その他 ====================
