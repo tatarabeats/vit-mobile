@@ -509,7 +509,15 @@ class MainActivity : AppCompatActivity() {
             saveDictionary()
         })
         b.dictionaryBox.addView(row)
-        if (focus) input.requestFocus()
+        if (focus) {
+            // 追加ボタンを押したら、すぐキーボードを出す（2026-11-06 駿平さん「辞書の追加ボタンを押したらすぐキーボードが開くようにしてほしい」）
+            input.requestFocus()
+            input.post {
+                input.requestFocus()
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                imm.showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
     }
 
     private fun removeRowButton(description: String, remove: () -> Unit) = MaterialButton(this).apply {
