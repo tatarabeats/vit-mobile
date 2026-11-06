@@ -6,6 +6,13 @@ adb shell pm grant com.shunp.vitmobile android.permission.RECORD_AUDIO || true
 adb shell pm grant com.shunp.vitmobile android.permission.POST_NOTIFICATIONS || true
 adb shell am start -W -n com.shunp.vitmobile/.MainActivity
 sleep 6
+# 辞書は下の「言葉」タブにある
+adb shell uiautomator dump /sdcard/ui.xml > /dev/null
+adb pull /sdcard/ui.xml ui0.xml > /dev/null
+python3 tools/tap_text.py ui0.xml "言葉" 0 > tab.txt || true
+echo "tab at: $(cat tab.txt)"
+[ -s tab.txt ] && adb shell input tap $(cat tab.txt)
+sleep 2
 : > tap.txt
 for i in 1 2 3 4 5 6 7 8 9 10; do
   adb shell uiautomator dump /sdcard/ui.xml > /dev/null
