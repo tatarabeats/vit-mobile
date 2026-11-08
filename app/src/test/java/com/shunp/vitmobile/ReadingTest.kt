@@ -30,4 +30,15 @@ class ReadingTest {
         assertEquals("見るとこ", r.rest)
         assertEquals("って言ったら、カタカナで表示されるように言ったのに", r.tail)
     }
+    @Test fun oneWordUnlessAll() {
+        assertEquals("アイスクリーム" to "食べたい", Reading.firstPhrase("アイスクリーム食べたい"))
+        assertEquals("東京都" to "に行きたい", Reading.firstPhrase("東京都に行きたい"))
+        val all = KanaMode.detect("全部カタカナで今日は晴れ")!!
+        assertEquals(true, all.all)
+        assertEquals("今日は晴れ", all.rest)
+        assertEquals(false, KanaMode.detect("カタカナで今日は晴れ")!!.all)
+        // 読点の後は命令と見なさない
+        assertEquals(null, KanaMode.detect("出版って言った時に、カタカナで出版の表示になっちゃったら"))
+    }
+
 }

@@ -448,7 +448,12 @@ class VoiceRecorder(private val ctx: Context) {
     }
 
     /** 「ひらがなで」「カタカナで」の後ろを、読みのとおりにひらがな／カタカナだけにする（KanaMode） */
-    private fun kanaConvert(req: KanaMode.Request): String {
+    private fun kanaConvert(full: KanaMode.Request): String {
+        // 「全部」が付いていない時は、次の言葉1つだけを変える（2026-11-08 駿平さん）
+        val req = if (full.all) full else try {
+            val (w, more) = Reading.firstPhrase(full.rest)
+            full.copy(rest = w, tail = more + full.tail)
+        } catch (_: Throwable) { full }
         // 読みは端末の中の辞書（Kuromoji）で出す。AI は回数制限で失敗することがあるので、辞書が使えない時だけ使う
         val local = try { Reading.toKatakana(req.rest) } catch (_: Throwable) { null }
         val read = if (local != null && !KanaMode.hasKanji(local) && !local.any { it in 'A'..'Z' || it in 'a'..'z' }) local  // 英字（youtube など）が残る時は AI で

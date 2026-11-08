@@ -9,7 +9,8 @@ object KanaMode {
     enum class Kind { HIRAGANA, KATAKANA }
 
     /** head = 「ひらがなで」より前（そのまま残す）、rest = 後ろ（変換する） */
-    data class Request(val kind: Kind, val rest: String, val head: String = "", val tail: String = "")
+    /** all = 「全部カタカナで」のように「全部」が付いた時（文の終わりまで変える）。無い時は次の言葉1つだけ（2026-11-08） */
+    data class Request(val kind: Kind, val rest: String, val head: String = "", val tail: String = "", val all: Boolean = false)
 
     /** 変えるのは、文の終わり（。！？）か「って」「と言」の手前まで（2026-11-06 駿平さん:
      *  「カタカナで見るとこって言ったら…」が、後ろの文まで全部カタカナになった） */
@@ -17,8 +18,9 @@ object KanaMode {
 
     // 文の頭だけでなく、句読点・空白・「です」「ます」などの文末の直後でも効く（PC版と同じ。2026-11-05）
     private val PREFIX = Regex(
-        "(?:^|(?<=[。、！？!?,.\\s　])|(?<=です)|(?<=ます)|(?<=でした)|(?<=ました)|(?<=だよ)|(?<=だね)|(?<=だ))" +
-        "\\s*(ひらがな|平仮名|ヒラガナ|カタカナ|片仮名|かたかな)(?:だけ|のみ)?で" +
+        // 読点・空白の後は命令と見なさない（「時に、カタカナで出版の表示に」が変わってしまった。2026-11-08）
+        "(?:^|(?<=[。！？!?])|(?<=です)|(?<=ます)|(?<=でした)|(?<=ました)|(?<=だよ)|(?<=だね)|(?<=だ))" +
+        "\\s*(全部|ぜんぶ|すべて|全て)?(ひらがな|平仮名|ヒラガナ|カタカナ|片仮名|かたかな)(?:だけ|のみ)?で" +
             "(?:入力して|入力|書いて|して)?[、,。.\\s　]*"
     )
 
@@ -34,8 +36,8 @@ object KanaMode {
             val cut = SPAN_END.find(all)?.range?.first ?: all.length
             val rest = all.substring(0, cut)
             if (rest.isBlank()) continue
-            val kind = if (m.groupValues[1] in setOf("ひらがな", "平仮名", "ヒラガナ")) Kind.HIRAGANA else Kind.KATAKANA
-            return Request(kind, rest, text.substring(0, m.range.first), all.substring(cut))
+            val kind = if (m.groupValues[2] in setOf("ひらがな", "平仮名", "ヒラガナ")) Kind.HIRAGANA else Kind.KATAKANA
+            return Request(kind, rest, text.substring(0, m.range.first), all.substring(cut), m.groupValues[1].isNotEmpty())
         }
         return null
     }

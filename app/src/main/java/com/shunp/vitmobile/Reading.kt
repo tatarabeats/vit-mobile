@@ -32,6 +32,21 @@ object Reading {
         }
     }
 
+    /** 先頭の言葉1つ（助詞・助動詞・記号の手前まで。名詞の後に動詞・形容詞が来たらその手前まで）と残り */
+    fun firstPhrase(text: String): Pair<String, String> {
+        var taken = 0
+        var sawNoun = false
+        for (t in tok().tokenize(text)) {
+            val pos = t.partOfSpeechLevel1
+            if (pos == "助詞" || pos == "助動詞" || pos == "記号") break
+            if (sawNoun && (pos == "動詞" || pos == "形容詞")) break
+            if (pos == "名詞") sawNoun = true
+            taken += t.surface.length
+        }
+        if (taken == 0) return text to ""
+        return text.substring(0, taken) to text.substring(taken)
+    }
+
     private data class Piece(val surf: String, val read: String, val last: Boolean)
 
     private fun pieces(text: String): List<Piece> {
