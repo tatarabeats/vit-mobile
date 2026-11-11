@@ -455,6 +455,8 @@ class InputAccessibilityService : AccessibilityService() {
 
     /** Return value means click accepted / tap dispatched, not proof the drawer opened.
      *  checkOnly=true の時は押さずに「一覧が開いているか」だけを返す。 */
+    private var lastSidebarOpenSkip = 0L
+
     fun openClaudeSidebar(checkOnly: Boolean = false): Boolean {
         updateSidebarForeground(sidebarWindowPackage())
         if (sidebarForegroundPackage != CLAUDE_PACKAGE && !isSidebarTargetActive()) {
@@ -498,6 +500,8 @@ class InputAccessibilityService : AccessibilityService() {
             val named = linkedMapOf<AccessibilityNodeInfo, String>()
             val drawerLabels = mutableSetOf<String>()
             var closeMenuVisible = false
+            val labelSeen = mutableListOf<String>()
+            val labelPos = mutableListOf<Rect>()
             fun walk(node: AccessibilityNodeInfo, ancestors: List<AccessibilityNodeInfo>, depth: Int) {
                 if (depth > 60) return
                 val bounds = rect(node)
@@ -507,11 +511,11 @@ class InputAccessibilityService : AccessibilityService() {
                     for (text in listOf(node.text, node.contentDescription)) {
                         val value = label(text).trim().lowercase(java.util.Locale.ROOT)
                         when (value) {
-                            "チャット", "chats" -> drawerLabels.add("chats")
-                            "プロジェクト", "projects" -> drawerLabels.add("projects")
-                            "code", "コード" -> drawerLabels.add("code")
+                            "チャット", "chats" -> { drawerLabels.add("chats"); labelPos.add(bounds); labelSeen.add("$value@$bounds") }
+                            "プロジェクト", "projects" -> { drawerLabels.add("projects"); labelPos.add(bounds); labelSeen.add("$value@$bounds") }
+                            "code", "コード" -> { drawerLabels.add("code"); labelPos.add(bounds); labelSeen.add("$value@$bounds") }
                             "メニューを閉じる", "close menu", "close sidebar", "close navigation menu",
-                            "サイドバーを閉じる" -> closeMenuVisible = true
+                            "サイドバーを閉じる" -> { closeMenuVisible = true; labelSeen.add("$value@$bounds") }
                         }
                     }
                 }
@@ -530,10 +534,26 @@ class InputAccessibilityService : AccessibilityService() {
             }
             walk(root, emptyList(), 0)
             // Require two distinct navigation entries, avoiding a matching word in chat text.
-            if (closeMenuVisible || drawerLabels.size >= 2) {
+            // 2026-11-11 駿平さん「アプリアプデしてから Claude のスワイプきかない」: Claude アプリ 1.261109 で、
+            // 一覧が閉じていても「チャット」「コード」などの文字が画面に出るようになり、毎回「もう開いている」と
+            // 見なして何もしなかった。一覧が本当に開いていれば右へなぞり直すことは無いので、
+            // 「開いている」と見て見送った直後（4秒以内）にまた右へなぞったら、見分けを信じずに開く。
+            // 一覧の中の「チャット」「プロジェクト」「Code」は縦に並ぶ。横一列（画面の上や下のタブ）なら一覧ではない
+            val stackedLabels = labelPos.any { a -> labelPos.any { b ->
+                kotlin.math.abs(a.centerY() - b.centerY()) > 40
+                    && kotlin.math.abs(a.left - b.left) < dm.widthPixels * 0.15f } }
+            if (drawerLabels.size >= 2 && !stackedLabels && !closeMenuVisible) drawerLabels.clear()
+            val now = android.os.SystemClock.uptimeMillis()
+            val retrySwipe = !checkOnly && now - lastSidebarOpenSkip < 4000
+            if ((closeMenuVisible || drawerLabels.size >= 2) && !retrySwipe) {
                 if (checkOnly) return true
-                ShizukuSwipeLog.write(this, "sidebar already open; skipped")
+                lastSidebarOpenSkip = now
+                ShizukuSwipeLog.write(this, "sidebar already open; skipped labels=${labelSeen.take(6)}")
                 return false
+            }
+            if (retrySwipe && (closeMenuVisible || drawerLabels.size >= 2)) {
+                lastSidebarOpenSkip = 0L
+                ShizukuSwipeLog.write(this, "sidebar looked open but swiped again; opening anyway labels=${labelSeen.take(6)}")
             }
             if (checkOnly) return false
             val orderedNamed = named.keys.sortedWith(compareBy({ rect(it).left }, { rect(it).top }))

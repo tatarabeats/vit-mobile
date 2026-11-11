@@ -4,8 +4,10 @@
 set -u
 APK="$1"
 A=/c/Users/shunp/Tools/platform-tools/adb.exe
-S="-s 192.168.137.81:5555"
-"$A" connect 192.168.137.81:5555 > /dev/null
+# スマホの住所はテザリングのたびに変わる（2026-11-11 は .179）。つながっている端末から選ぶ
+DEV=$("$A" devices | awk '$2=="device"{print $1; exit}')
+if [ -z "$DEV" ]; then echo "スマホが adb につながっていない"; exit 1; fi
+S="-s $DEV"
 quiet=0
 for i in $(seq 1 360); do
   # pending_rec.json は録音中〜書き起こし中だけある
