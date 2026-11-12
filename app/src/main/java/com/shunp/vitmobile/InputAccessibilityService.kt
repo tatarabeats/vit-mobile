@@ -457,7 +457,7 @@ class InputAccessibilityService : AccessibilityService() {
      *  checkOnly=true の時は押さずに「一覧が開いているか」だけを返す。 */
     private var lastSidebarOpenSkip = 0L
 
-    fun openClaudeSidebar(checkOnly: Boolean = false): Boolean {
+    fun openClaudeSidebar(checkOnly: Boolean = false, afterBack: Int = 0): Boolean {
         updateSidebarForeground(sidebarWindowPackage())
         if (sidebarForegroundPackage != CLAUDE_PACKAGE && !isSidebarTargetActive()) {
             sidebarDiag("skipped (disabled or target not foreground)")
@@ -544,25 +544,37 @@ class InputAccessibilityService : AccessibilityService() {
                     && kotlin.math.abs(a.left - b.left) < dm.widthPixels * 0.15f } }
             if (drawerLabels.size >= 2 && !stackedLabels && !closeMenuVisible) drawerLabels.clear()
             val now = android.os.SystemClock.uptimeMillis()
-            val retrySwipe = !checkOnly && now - lastSidebarOpenSkip < 4000
+            val retrySwipe = !checkOnly && (afterBack > 0 || now - lastSidebarOpenSkip < 4000)
             if ((closeMenuVisible || drawerLabels.size >= 2) && !retrySwipe) {
                 if (checkOnly) return true
                 lastSidebarOpenSkip = now
                 ShizukuSwipeLog.write(this, "sidebar already open; skipped labels=${labelSeen.take(6)}")
                 return false
             }
-            if (retrySwipe && (closeMenuVisible || drawerLabels.size >= 2)) {
+            if (afterBack == 0 && retrySwipe && (closeMenuVisible || drawerLabels.size >= 2)) {
                 lastSidebarOpenSkip = 0L
                 ShizukuSwipeLog.write(this, "sidebar looked open but swiped again; opening anyway labels=${labelSeen.take(6)}")
             }
             if (checkOnly) return false
+            val menuWords = listOf("メニュー", "menu", "sidebar", "サイドバー", "drawer", "navigation")
             val orderedNamed = named.keys.sortedWith(compareBy({ rect(it).left }, { rect(it).top }))
+                // 「戻る」の後は、メニューを開くボタンだけを押す（「チャット」などの別のボタンは押さない）
+                .filter { c -> afterBack == 0 || menuWords.any { (named[c] ?: "").contains(it, ignoreCase = true) } }
             for (candidate in orderedNamed) {
                 sidebarDiag("candidate named ${describe(candidate)} matched=${named[candidate]}")
                 val clicked = try { candidate.performAction(AccessibilityNodeInfo.ACTION_CLICK) }
                     catch (_: Exception) { false }
                 sidebarDiag("ACTION_CLICK named accepted=$clicked")
                 if (clicked) return true
+            }
+            if (afterBack > 0) {
+                // 「戻る」を押した後は、メニューのボタンが出るまで少し待って探し直す。他の物は押さない
+                if (afterBack < 6) {
+                    handler.postDelayed({ openClaudeSidebar(afterBack = afterBack + 1) }, 200)
+                } else {
+                    sidebarDiag("after back: menu button not found; gave up")
+                }
+                return false
             }
             if (named.isEmpty()) {
                 sidebarDiag("no named candidate; top clickables=${topClickables.size}")
@@ -579,6 +591,15 @@ class InputAccessibilityService : AccessibilityService() {
                 val clicked = try { positional.performAction(AccessibilityNodeInfo.ACTION_CLICK) }
                     catch (_: Exception) { false }
                 sidebarDiag("ACTION_CLICK positional accepted=$clicked")
+                // 2026-11-12 駿平さん「履歴のあるチャットからスワイプすると CODE の画面が開いてしまう。
+                // 3本線のメニューボタンを押したときの画面が開いてほしい」: Claude アプリ 1.261109 では、
+                // 話した後の画面の左上は「戻る」でメニューのボタンが無い。「戻る」で一覧の画面に出た後、
+                // そこにある「メニューを開く」を続けて押す
+                val backLabel = label(positional.contentDescription).trim().lowercase(java.util.Locale.ROOT)
+                if (clicked && backLabel in setOf("戻る", "back", "navigate up", "上へ移動", "前に戻る")) {
+                    sidebarDiag("pressed back; will press the menu button on the next screen")
+                    handler.postDelayed({ openClaudeSidebar(afterBack = 1) }, 300)
+                }
                 if (clicked) return true
             } else {
                 sidebarDiag("no positional candidate")
