@@ -1090,7 +1090,7 @@ class InputAccessibilityService : AccessibilityService() {
         try {
             val f = java.io.File(filesDir, "autosend.log")
             if (f.length() > 40_000) f.writeText("")
-            f.appendText(line + "\n")
+            f.appendText(java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date()) + " " + line + "\n")
         } catch (_: Exception) {}
     }
 
