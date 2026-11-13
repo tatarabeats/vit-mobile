@@ -227,6 +227,7 @@ class InputAccessibilityService : AccessibilityService() {
         try { unregisterReceiver(receiver) } catch (_: Exception) {}
         if (BuildConfig.DEBUG) try { unregisterReceiver(debugSidebarReceiver) } catch (_: Exception) {}
         cancelSidebarSwipe()
+        hideFreezeFrame(0)
         isSidebarObservationEnabled = false
         instance = null
         OverlayService.refreshClaudeSwipe()
@@ -238,6 +239,7 @@ class InputAccessibilityService : AccessibilityService() {
         if (instance === this) secureApps.observerStopped()
         shizukuSwipe?.close()
         shizukuSwipe = null
+        hideFreezeFrame(0)
         if (instance === this) instance = null
         super.onDestroy()
     }
@@ -457,8 +459,159 @@ class InputAccessibilityService : AccessibilityService() {
      *  checkOnly=true の時は押さずに「一覧が開いているか」だけを返す。 */
     private var lastSidebarOpenSkip = 0L
 
+    // ---- Claude の「戻る→メニュー」の間、直前の画面を写した一枚をかぶせて、途中の一覧（Code）を見せない ----
+    // 2026-11-13 駿平さん「CODEの方は、そもそも一瞬も開いてほしくない…メニューだけ一発で開けようにしてほしいのに、
+    // 一瞬CODEを挟むから結構邪魔」。Claude アプリ 1.261109 の会話の画面にはメニューのボタンが無く、
+    // 「戻る」で一覧に出てから「メニューを開く」を押すしかない。記録では、その間の約0.7秒、一覧が見えていた
+    private var freezeView: android.widget.ImageView? = null
+    private var freezeBitmap: android.graphics.Bitmap? = null
+    private var sidebarChainAlive = false
+    private var sidebarBackAt = 0L
+    private var sidebarBusyUntil = 0L
+
+    @android.annotation.TargetApi(30)
+    private fun freezeScreenThen(next: () -> Unit) {
+        if (Build.VERSION.SDK_INT < 30) { next(); return }
+        hideFreezeFrame(0)
+        val started = android.os.SystemClock.uptimeMillis()
+        var proceeded = false
+        fun proceed(why: String) {
+            if (proceeded) return
+            proceeded = true
+            sidebarDiag("freeze frame $why +${android.os.SystemClock.uptimeMillis() - started}ms")
+            next()
+        }
+        // 写しが取れない・遅い時は、かぶせずに進める（待たせない）
+        handler.postDelayed({ proceed("not ready; continuing without it") }, 300)
+        try {
+            takeScreenshot(android.view.Display.DEFAULT_DISPLAY, mainExecutor,
+                object : AccessibilityService.TakeScreenshotCallback {
+                    override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
+                        val buffer = result.hardwareBuffer
+                        val bitmap = try { android.graphics.Bitmap.wrapHardwareBuffer(buffer, result.colorSpace) }
+                            catch (_: Exception) { null }
+                        try { buffer.close() } catch (_: Exception) {}
+                        if (bitmap == null) { proceed("no bitmap"); return }
+                        if (proceeded) { bitmap.recycle(); return }
+                        try {
+                            showFreezeFrame(bitmap) { proceed("shown") }
+                        } catch (e: Exception) {
+                            hideFreezeFrame(0)
+                            proceed("overlay failed ${e.javaClass.simpleName}")
+                        }
+                    }
+                    override fun onFailure(errorCode: Int) { proceed("screenshot failed code=$errorCode") }
+                })
+        } catch (e: Exception) {
+            proceed("screenshot unavailable ${e.javaClass.simpleName}")
+        }
+    }
+
+    @android.annotation.TargetApi(30)
+    private fun showFreezeFrame(bitmap: android.graphics.Bitmap, onDrawn: () -> Unit) {
+        val wm = getSystemService(android.view.WindowManager::class.java)
+        val dm = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getRealMetrics(dm)
+        val view = android.widget.ImageView(this).apply {
+            setImageBitmap(bitmap)
+            scaleType = android.widget.ImageView.ScaleType.FIT_XY
+        }
+        freezeView = view
+        freezeBitmap = bitmap
+        // 指の操作は下の Claude にそのまま通す（さわれない・フォーカスを取らない）
+        val lp = android.view.WindowManager.LayoutParams(
+            dm.widthPixels, dm.heightPixels,
+            android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                or android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                or android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            android.graphics.PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            x = 0
+            y = 0
+            title = "VIT-Freeze"
+            windowAnimations = 0
+            layoutInDisplayCutoutMode =
+                android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            setFitInsetsTypes(0)
+        }
+        wm.addView(view, lp)
+        // 何があっても残さない（画面が固まって見えるのを防ぐ）
+        handler.postDelayed({
+            if (freezeView === view) {
+                sidebarDiag("freeze frame removed by time limit")
+                sidebarBusyUntil = 0L
+                hideFreezeFrame(0)
+            }
+        }, 2500)
+        // かぶせた一枚が実際に画面に出てから「戻る」を押す
+        var drawn = false
+        view.viewTreeObserver.addOnDrawListener {
+            if (!drawn) { drawn = true; handler.postDelayed({ onDrawn() }, 40) }
+        }
+    }
+
+    private fun hideFreezeFrame(fadeMs: Long) {
+        val view = freezeView ?: return
+        val bitmap = freezeBitmap
+        freezeView = null
+        freezeBitmap = null
+        val wm = getSystemService(android.view.WindowManager::class.java)
+        val remove = Runnable {
+            try { if (view.isAttachedToWindow) wm.removeViewImmediate(view) } catch (_: Exception) {}
+            try { view.setImageDrawable(null); bitmap?.recycle() } catch (_: Exception) {}
+        }
+        if (fadeMs <= 0) { remove.run(); return }
+        try { view.animate().alpha(0f).setDuration(fadeMs).start() } catch (_: Exception) {}
+        handler.postDelayed(remove, fadeMs + 30)
+    }
+
+    /** メニューを押した後、メニューが開き切ってから かぶせた一枚を外す（押して 0.25〜0.5 秒）。 */
+    private fun releaseFreezeWhenMenuOpen(pressedAt: Long) {
+        if (freezeView == null) { sidebarBusyUntil = 0L; return }
+        handler.postDelayed({
+            if (freezeView == null) { sidebarBusyUntil = 0L; return@postDelayed }
+            val waited = android.os.SystemClock.uptimeMillis() - pressedAt
+            val open = waited >= 250 && try { openClaudeSidebar(checkOnly = true) } catch (_: Exception) { false }
+            if (open || waited >= 500) {
+                sidebarDiag("freeze frame release (menu open=$open) +${waited}ms after menu press")
+                sidebarBusyUntil = 0L
+                hideFreezeFrame(120)
+            } else {
+                releaseFreezeWhenMenuOpen(pressedAt)
+            }
+        }, 50)
+    }
+
     fun openClaudeSidebar(checkOnly: Boolean = false, afterBack: Int = 0): Boolean {
+        if (afterBack > 0) sidebarChainAlive = false
+        val result = openClaudeSidebarStep(checkOnly, afterBack)
+        // 「戻る」の後の続きが終わった（押せた後の待ちも、探し直しも無い）時は、かぶせた一枚を必ず外す
+        if (afterBack > 0 && !sidebarChainAlive) {
+            sidebarBusyUntil = 0L
+            hideFreezeFrame(0)
+        }
+        return result
+    }
+
+    private fun openClaudeSidebarStep(checkOnly: Boolean, afterBack: Int): Boolean {
+        if (!checkOnly && afterBack == 0 && android.os.SystemClock.uptimeMillis() < sidebarBusyUntil) {
+            sidebarDiag("skipped (already opening the menu)")
+            return false
+        }
+        // 「戻る」の後、次の画面が出るまでは 0.05 秒おきに探し直す（戻るを押してから最大 1.5 秒）
+        fun retryAfterBack(): Boolean {
+            if (afterBack <= 0 || android.os.SystemClock.uptimeMillis() - sidebarBackAt >= 1500) return false
+            sidebarChainAlive = true
+            handler.postDelayed({ openClaudeSidebar(afterBack = afterBack + 1) }, 50)
+            return true
+        }
         updateSidebarForeground(sidebarWindowPackage())
+        // 画面が切り替わる途中は、前面の窓が一瞬読めないことがある。別のアプリに移った時だけ打ち切る
+        if (sidebarForegroundPackage == null && retryAfterBack()) return false
         if (sidebarForegroundPackage != CLAUDE_PACKAGE && !isSidebarTargetActive()) {
             sidebarDiag("skipped (disabled or target not foreground)")
             return false
@@ -469,6 +622,7 @@ class InputAccessibilityService : AccessibilityService() {
                 it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.isFocused
             }?.root ?: rootInActiveWindow
             if (root == null) {
+                if (retryAfterBack()) return false
                 sidebarDiag("skipped (target window unavailable)")
                 return false
             }
@@ -558,22 +712,27 @@ class InputAccessibilityService : AccessibilityService() {
             if (checkOnly) return false
             val menuWords = listOf("メニュー", "menu", "sidebar", "サイドバー", "drawer", "navigation")
             val orderedNamed = named.keys.sortedWith(compareBy({ rect(it).left }, { rect(it).top }))
-                // 「戻る」の後は、メニューを開くボタンだけを押す（「チャット」などの別のボタンは押さない）
-                .filter { c -> afterBack == 0 || menuWords.any { (named[c] ?: "").contains(it, ignoreCase = true) } }
+                // 「戻る」の後は、メニューを開くボタンだけを押す（「チャット」などの別のボタンや「閉じる」は押さない）
+                .filter { c -> afterBack == 0 || (menuWords.any { (named[c] ?: "").contains(it, ignoreCase = true) }
+                    && listOf("閉じる", "close").none { (named[c] ?: "").contains(it, ignoreCase = true) }) }
             for (candidate in orderedNamed) {
                 sidebarDiag("candidate named ${describe(candidate)} matched=${named[candidate]}")
                 val clicked = try { candidate.performAction(AccessibilityNodeInfo.ACTION_CLICK) }
                     catch (_: Exception) { false }
                 sidebarDiag("ACTION_CLICK named accepted=$clicked")
-                if (clicked) return true
+                if (clicked) {
+                    if (afterBack > 0) {
+                        val pressedAt = android.os.SystemClock.uptimeMillis()
+                        sidebarDiag("after back: menu pressed on try $afterBack +${pressedAt - sidebarBackAt}ms after back")
+                        sidebarChainAlive = true
+                        releaseFreezeWhenMenuOpen(pressedAt)
+                    }
+                    return true
+                }
             }
             if (afterBack > 0) {
-                // 「戻る」を押した後は、メニューのボタンが出るまで少し待って探し直す。他の物は押さない
-                if (afterBack < 6) {
-                    handler.postDelayed({ openClaudeSidebar(afterBack = afterBack + 1) }, 200)
-                } else {
-                    sidebarDiag("after back: menu button not found; gave up")
-                }
+                // 「戻る」を押した後は、メニューのボタンが出るまで探し直す。他の物は押さない
+                if (!retryAfterBack()) sidebarDiag("after back: menu button not found; gave up")
                 return false
             }
             if (named.isEmpty()) {
@@ -588,18 +747,34 @@ class InputAccessibilityService : AccessibilityService() {
             }.minWithOrNull(compareBy({ rect(it).left }, { rect(it).top }))
             if (positional != null) {
                 sidebarDiag("candidate positional ${describe(positional)}")
-                val clicked = try { positional.performAction(AccessibilityNodeInfo.ACTION_CLICK) }
-                    catch (_: Exception) { false }
-                sidebarDiag("ACTION_CLICK positional accepted=$clicked")
                 // 2026-11-12 駿平さん「履歴のあるチャットからスワイプすると CODE の画面が開いてしまう。
                 // 3本線のメニューボタンを押したときの画面が開いてほしい」: Claude アプリ 1.261109 では、
                 // 話した後の画面の左上は「戻る」でメニューのボタンが無い。「戻る」で一覧の画面に出た後、
-                // そこにある「メニューを開く」を続けて押す
+                // そこにある「メニューを開く」を続けて押す。
+                // 2026-11-13: その間の一覧（Code）を見せないため、今の画面を写した一枚をかぶせてから「戻る」を押し、
+                // メニューが開いてから外す（freezeScreenThen）
                 val backLabel = label(positional.contentDescription).trim().lowercase(java.util.Locale.ROOT)
-                if (clicked && backLabel in setOf("戻る", "back", "navigate up", "上へ移動", "前に戻る")) {
-                    sidebarDiag("pressed back; will press the menu button on the next screen")
-                    handler.postDelayed({ openClaudeSidebar(afterBack = 1) }, 300)
+                if (backLabel in setOf("戻る", "back", "navigate up", "上へ移動", "前に戻る")) {
+                    @Suppress("DEPRECATION")
+                    val backNode = AccessibilityNodeInfo.obtain(positional)
+                    sidebarBusyUntil = android.os.SystemClock.uptimeMillis() + 2500
+                    freezeScreenThen {
+                        val clicked = try { backNode.performAction(AccessibilityNodeInfo.ACTION_CLICK) }
+                            catch (_: Exception) { false }
+                        sidebarDiag("ACTION_CLICK back accepted=$clicked; will press the menu button on the next screen")
+                        if (clicked) {
+                            sidebarBackAt = android.os.SystemClock.uptimeMillis()
+                            handler.postDelayed({ openClaudeSidebar(afterBack = 1) }, 50)
+                        } else {
+                            sidebarBusyUntil = 0L
+                            hideFreezeFrame(0)
+                        }
+                    }
+                    return true
                 }
+                val clicked = try { positional.performAction(AccessibilityNodeInfo.ACTION_CLICK) }
+                    catch (_: Exception) { false }
+                sidebarDiag("ACTION_CLICK positional accepted=$clicked")
                 if (clicked) return true
             } else {
                 sidebarDiag("no positional candidate")
