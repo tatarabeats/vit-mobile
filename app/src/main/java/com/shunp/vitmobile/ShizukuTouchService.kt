@@ -21,6 +21,7 @@ class ShizukuTouchService : IShizukuTouchService.Stub() {
         // No arbitrary shell/interpolation: only this app's one-time grants.
         val tool = when {
             Regex("pm grant --user [0-9]+ com\\.shunp\\.vitmobile android\\.permission\\.WRITE_SECURE_SETTINGS").matches(cmd) -> "/system/bin/pm"
+            Regex("cmd appops set --user [0-9]+ com\\.shunp\\.vitmobile GET_USAGE_STATS allow").matches(cmd) -> "/system/bin/cmd"
             else -> throw IllegalArgumentException("command not allowed")
         }
         val child = ProcessBuilder(listOf(tool) + cmd.split(' ').drop(1))

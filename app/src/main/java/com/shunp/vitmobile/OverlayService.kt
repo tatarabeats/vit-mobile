@@ -139,6 +139,7 @@ class OverlayService : Service() {
         updateClaudeSwipeOverlay()
         recorder = VoiceRecorder(this)
         recorder?.recoverPending()
+        AccPause.resumeIfNeeded(this)
         // Check immediately, then hourly while resident. Handler does not wake a sleeping device.
         mainHandler.post(updateCheck)
     }

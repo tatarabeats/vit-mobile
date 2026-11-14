@@ -10,6 +10,9 @@
     <!-- Hidden signature permission: ordinary installs fall back to the edge strip. -->
     <uses-permission android:name="android.permission.ACCESSIBILITY_MOTION_EVENT_OBSERVING"
         tools:ignore="ProtectedPermissions" />
+    <!-- PayPay などの間だけユーザー補助を切った後、「離れた」を知るため（AccPause）。許可は Shizuku で自分に付ける -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -62,6 +65,15 @@
             android:exported="false"
             android:label="履歴"
             android:theme="@style/Theme.VitMobile" />
+
+        <!-- 何も表示しない。PayPay などに「開き直した」を起こすために一瞬だけ前に出る（AccPause） -->
+        <activity
+            android:name=".NudgeActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:noHistory="true" />
 
         <!-- One Hand Operation+ 等のジェスチャーから「アプリを開く」で選べる透明な入口。
              開いても何も表示せず、録音の開始/確定だけを行う -->

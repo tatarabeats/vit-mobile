@@ -26,7 +26,7 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
     private val power = owner.getSystemService(PowerManager::class.java)
     private val displays = owner.getSystemService(DisplayManager::class.java)
     private val args = Shizuku.UserServiceArgs(ComponentName(owner, ShizukuTouchService::class.java))
-        .daemon(false).processNameSuffix("sidebar_touch").debuggable(BuildConfig.DEBUG).version(2)
+        .daemon(false).processNameSuffix("sidebar_touch").debuggable(BuildConfig.DEBUG).version(3)
     private var active = false
     private var screenOn = false
     private var session: Session? = null
@@ -202,6 +202,7 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
             thread(name = "vit-shizuku-swipe", isDaemon = true) {
                 try {
                     SecureAppsController.grantPermission(owner, remote)
+                    AccPause.grantUsageAccess(owner, remote)
                     main.post { SecureAppsController.get(owner).permissionAvailable() }
                     if (cancelled) return@thread
                     val listing = readPipe(remote.listDevices()) { it.readText() } ?: return@thread

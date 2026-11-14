@@ -221,7 +221,8 @@ class InputAccessibilityService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         handler.removeCallbacks(recoverSecureForeground)
-        secureApps.observerStopped()
+        // PayPay などのために自分で切った時は、カードアプリ用の設定を戻さない（離れた時に AccPause が戻す）
+        if (!AccPause.active) secureApps.observerStopped()
         shizukuSwipe?.close()
         shizukuSwipe = null
         try { unregisterReceiver(receiver) } catch (_: Exception) {}
@@ -236,7 +237,7 @@ class InputAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         handler.removeCallbacks(recoverSecureForeground)
-        if (instance === this) secureApps.observerStopped()
+        if (instance === this && !AccPause.active) secureApps.observerStopped()
         shizukuSwipe?.close()
         shizukuSwipe = null
         hideFreezeFrame(0)
@@ -435,6 +436,8 @@ class InputAccessibilityService : AccessibilityService() {
             }
         } catch (_: Exception) { null }
         secureApps.foreground(pkg)
+        // PayPay などは、ユーザー補助がオンだと使えない。前面の間だけ自分を切る（離れたら AccPause が戻す）
+        AccPause.onForeground(this, pkg)
     }
 
     private fun sidebarDiag(message: String) {

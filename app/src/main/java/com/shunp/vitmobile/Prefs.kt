@@ -101,6 +101,24 @@ object Prefs {
         return edit.commit()
     }
 
+    // ユーザー補助がオンだと使えないアプリ（前面の間だけ VIT のユーザー補助を切る）。1 行に 1 つ
+    private const val DEFAULT_ACC_PAUSE_APPS = "jp.ne.paypay.android.app" // PayPay（2026-11-14）
+
+    fun isAccPauseApp(ctx: Context, pkg: String): Boolean =
+        (ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("acc_pause_packages", DEFAULT_ACC_PAUSE_APPS)
+            ?: DEFAULT_ACC_PAUSE_APPS).lineSequence().any { it.trim().equals(pkg, ignoreCase = true) }
+
+    /** 切っている相手のアプリ（切っていなければ null）。プロセスが作り直されても戻せるように保存する */
+    fun getAccPauseState(ctx: Context): String? =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("acc_pause_state", null)
+
+    /** 同期で書く: 印が保存できてからユーザー補助を切る */
+    fun setAccPauseState(ctx: Context, pkg: String?): Boolean {
+        val edit = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        if (pkg == null) edit.remove("acc_pause_state") else edit.putString("acc_pause_state", pkg)
+        return edit.commit()
+    }
+
     /** Shizuku（thedjchi 版）の START/STOP インテントに付ける合言葉。Shizuku の「インテントを表示」画面から自動で覚える */
     fun getShizukuAuth(ctx: Context): String =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("shizuku_auth", "") ?: ""

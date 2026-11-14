@@ -139,6 +139,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         SecureAppsController.get(this).activityStarted()
+        AccPause.resumeIfNeeded(this)
         shizukuPermission.start()
     }
 
