@@ -509,42 +509,43 @@ class VoiceRecorder(private val ctx: Context) {
         if (key.isNullOrBlank()) { return@withContext null }
 
         val dict = Prefs.getDictionary(ctx).trim()
-        val builder = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart(
-                "file", file.name,
-                file.asRequestBody("audio/m4a".toMediaType())
-            )
-            .addFormDataPart("model", "whisper-large-v3-turbo")
-            .addFormDataPart("language", "ja")
-            .addFormDataPart("response_format", "verbose_json")
-        if (dict.isNotEmpty()) {
-            // Whisper の prompt は最大 224 トークン → 安全に 800 文字でクランプ
-            val prompt = if (dict.length > 800) dict.substring(0, 800) else dict
-            builder.addFormDataPart("prompt", prompt)
-        }
-        val body = builder.build()
-
-        val req = Request.Builder()
-            .url("https://api.groq.com/openai/v1/audio/transcriptions")
-            .header("Authorization", "Bearer $key")
-            .header("User-Agent", "VitMobile/0.1")
-            .post(body)
-            .build()
-
-        try {
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    android.util.Log.d("VIT", "groq ${resp.code}")
-                    return@withContext null
-                }
-                val json = JSONObject(resp.body?.string() ?: "{}")
-                textFromVerbose(json)
+        // 2026-11-15 駿平さん「俺が喋った内容が全く違うように捉えられてることが多い」: PC の録音 90 本で比べると、
+        // 意味が変わる食い違い 14 件のうち large-v3 が合っていたのが 10 件、turbo が 3 件（速さは同じ）。
+        // large-v3 を先に使い、失敗（回数制限 429 はモデルごと・廃止・通信の失敗）の時だけ今までの turbo で送り直す。
+        for (model in listOf("whisper-large-v3", "whisper-large-v3-turbo")) {
+            val builder = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart(
+                    "file", file.name,
+                    file.asRequestBody("audio/m4a".toMediaType())
+                )
+                .addFormDataPart("model", model)
+                .addFormDataPart("language", "ja")
+                .addFormDataPart("response_format", "verbose_json")
+            if (dict.isNotEmpty()) {
+                // Whisper の prompt は最大 224 トークン → 安全に 800 文字でクランプ
+                val prompt = if (dict.length > 800) dict.substring(0, 800) else dict
+                builder.addFormDataPart("prompt", prompt)
             }
-        } catch (e: Exception) {
-            android.util.Log.d("VIT", "groq failed: ${e.message}")
-            null
+            val req = Request.Builder()
+                .url("https://api.groq.com/openai/v1/audio/transcriptions")
+                .header("Authorization", "Bearer $key")
+                .header("User-Agent", "VitMobile/0.1")
+                .post(builder.build())
+                .build()
+            try {
+                val json = client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        android.util.Log.d("VIT", "groq ${resp.code} model=$model")
+                        null
+                    } else JSONObject(resp.body?.string() ?: "{}")
+                }
+                if (json != null) return@withContext textFromVerbose(json)
+            } catch (e: Exception) {
+                android.util.Log.d("VIT", "groq failed model=$model: ${e.message}")
+            }
         }
+        null
     }
 
     /**
