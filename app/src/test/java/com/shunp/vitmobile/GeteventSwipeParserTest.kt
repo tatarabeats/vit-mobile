@@ -336,6 +336,24 @@ class GeteventSwipeParserTest {
         assertFalse(s.finish(1000 + 140 * 4095 / 1080, 2000 - 220 * 4095 / 2340))
     }
 
+    @Test fun slowReadingScrollDriftingRightDoesNotOpen() {
+        // 2026-11-19 実測の誤作動: dx=277/maxDy=250/1391ms, 263/191/1026, 162/156/882, 222/115/609, 247/201/975
+        for ((dx, dy, ms) in listOf(Triple(277, 250, 1391), Triple(263, 191, 1026), Triple(162, 156, 882),
+                Triple(222, 115, 609), Triple(247, 201, 975))) {
+            val s = Stream(device)
+            s.down(1000, 2000)
+            s.time += ms.toLong()
+            assertFalse("$dx/$dy/$ms", s.finish(1000 + dx * 4095 / 1080, 2000 - dy * 4095 / 2340))
+        }
+    }
+
+    @Test fun quickThumbArcStillOpens() {
+        val s = Stream(device)
+        s.down(1000, 2000)
+        s.time += 480
+        assertTrue(s.finish(1000 + 220 * 4095 / 1080, 2000 - 180 * 4095 / 2340))
+    }
+
     @Test fun thumbArcAt45Opens() {
         val s = Stream(device)
         s.down(1000, 2000)

@@ -170,7 +170,11 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                         val arc = dx >= display.width * 0.12f
                             && dx >= maxAbsDy
                             && maxAbsDy < display.height * 0.22f
-                        val ok = !fromEdge && time - startTime in 0L..(if (straight) 700L else 1400L)
+                        // 2026-11-19 駿平さん「スワイプしてないのに、メニュー画面が開くことが多すぎる」。
+                        // 実測: 誤って開いたのは全部、ゆっくり読みながらの上下スクロール（親指が右へ流れる）で
+                        // dx=162〜277/maxDy=115〜250/609〜1391ms。前後に同じ形の ok=false が何本も並んでいた。
+                        // 本当のスワイプは途中判定（45〜92ms）で決まっている → 弧は 500ms 以内の速い物だけ開く
+                        val ok = !fromEdge && time - startTime in 0L..(if (straight) 700L else 500L)
                             && (straight || arc)
                             && minDx > -display.width * 0.03f
                             && (lastFire == null || time - lastFire!! >= 300)
