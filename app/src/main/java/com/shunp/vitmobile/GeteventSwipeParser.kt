@@ -141,8 +141,10 @@ internal class GeteventSwipeParser(private val device: TouchDevice) {
                     // メニューを閉じる左なぞりも、指を離す前に決める。離してからだと、Claude が指の下のスレッドを
                     // 押したことにして、指の位置によって別のスレッドが開いていた（2026-11-06 駿平さん「常に直前に開いてたやつに戻るようにしたい」）
                     if (!earlyLeftFired && !lifted && elapsed in 0L..350L
-                        && dx <= -display.width * 0.06f && -dx >= maxAbsDy * 2.0f
-                        && maxAbsDy < display.height * 0.05f && maxDx < display.width * 0.03f) {
+                        && dx <= -display.width * 0.06f && -dx >= maxAbsDy * 1.5f
+                        // 2026-11-20: 記録の左なぞり dx=-647/maxDy=152 が途中で決まらず、指を離すまでの間に
+                        // Code の一覧が見えていた。左なぞりは、メニューの後か開いている時にしか使わないので緩めてよい
+                        && maxAbsDy < display.height * 0.08f && maxDx < display.width * 0.03f) {
                         earlyLeftFired = true
                         earlyLeft = (startX ?: -1f) to (startY ?: -1f)
                     }

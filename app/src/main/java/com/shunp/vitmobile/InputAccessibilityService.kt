@@ -472,6 +472,206 @@ class InputAccessibilityService : AccessibilityService() {
     private var sidebarBackAt = 0L
     private var sidebarBusyUntil = 0L
 
+    // ---- 2026-11-20 駿平さん「スワイプした瞬間に切り替わらないといけない」「VIT を開いた状態で左から右、
+    // その後に右から左にスワイプしたら、VIT のスレッドに戻るべき…コードを開くなんて動作はありえない」 ----
+    // 記録（17:38）: なぞってからメニューが出るまで 1.1〜1.3 秒。うち 0.5 秒は、Claude 1.261117 のメニューの
+    // 項目（最近の項目・スケジュール済みタスク・Dispatch など）を「開いた」と見分けられず、上限まで待っていた分。
+    // メニューは「戻る」で Code の一覧に出てから開くので、メニューを閉じると Code の一覧が出ていた。
+    // ・メニューを押した後に新しく出た項目で「開いた」と見分ける（押す前の一覧にあった言葉は数えない）
+    // ・開いたメニューを写しておき、次からはなぞった瞬間にその写しを出す
+    // ・左へなぞったら、会話の写しをすぐかぶせ、その下で元のスレッド（題名で探す）を押して戻す
+    private val NAV_DRAWER_WORDS = setOf("最近の項目", "recents", "recent", "すべて表示", "view all", "see all",
+        "スケジュール済みタスク", "scheduled tasks", "scheduled", "dispatch", "新規セッション", "new session",
+        "その他", "more", "チャット", "chats", "プロジェクト", "projects", "code", "コード", "設定", "settings")
+    private var lastNavLabels: Set<String> = emptySet()
+    private var navLabelsBeforeMenu: Set<String> = emptySet()
+    private var chatSnapshot: android.graphics.Bitmap? = null
+    private var drawerSnapshot: android.graphics.Bitmap? = null
+    private var returnTitle: String? = null
+    private var returnArmedAt = 0L
+    private var returnBusyUntil = 0L
+    private val BACK_LABELS = setOf("戻る", "back", "navigate up", "上へ移動", "前に戻る")
+
+    private fun menuOpenedSinceMenuPress(): Boolean {
+        val legacy = try { openClaudeSidebar(checkOnly = true) } catch (_: Exception) { false }
+        return legacy || (lastNavLabels - navLabelsBeforeMenu).size >= 2
+    }
+
+    private fun keepChatSnapshot(bitmap: android.graphics.Bitmap) {
+        val old = chatSnapshot
+        chatSnapshot = bitmap
+        if (old != null && old !== bitmap && old !== freezeBitmap && old !== drawerSnapshot) {
+            try { old.recycle() } catch (_: Exception) {}
+        }
+    }
+
+    /** 開き切ったメニューを写しておく（次のなぞりで、すぐ出す）。メニューが開いていると確かめられた時だけ。 */
+    @android.annotation.TargetApi(30)
+    private fun captureDrawerSnapshot() {
+        if (Build.VERSION.SDK_INT < 30 || freezeView != null) return
+        if (!isClaudeForegroundForShizuku() || !menuOpenedSinceMenuPress()) {
+            sidebarDiag("menu image not taken (menu not open)")
+            return
+        }
+        val root = claudeRoot() ?: return
+        if ((scanClaude(root, null).topLeft ?: "") in BACK_LABELS) return
+        try {
+            takeScreenshot(android.view.Display.DEFAULT_DISPLAY, mainExecutor,
+                object : AccessibilityService.TakeScreenshotCallback {
+                    override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
+                        val buffer = result.hardwareBuffer
+                        val bitmap = try { android.graphics.Bitmap.wrapHardwareBuffer(buffer, result.colorSpace) }
+                            catch (_: Exception) { null }
+                        try { buffer.close() } catch (_: Exception) {}
+                        if (bitmap == null) return
+                        // 写している間に閉じられていたら使わない
+                        if (freezeView != null || !menuOpenedSinceMenuPress()) { bitmap.recycle(); return }
+                        val old = drawerSnapshot
+                        drawerSnapshot = bitmap
+                        if (old != null && old !== freezeBitmap && old !== chatSnapshot) old.recycle()
+                        sidebarDiag("menu image saved")
+                    }
+                    override fun onFailure(errorCode: Int) { sidebarDiag("menu image failed code=$errorCode") }
+                })
+        } catch (_: Exception) {}
+    }
+
+    private fun claudeRoot(): AccessibilityNodeInfo? {
+        val root = try {
+            windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.isFocused }?.root
+                ?: rootInActiveWindow
+        } catch (_: Exception) { null }
+        return root?.takeIf { it.packageName?.toString() == CLAUDE_PACKAGE }
+    }
+
+    private class ClaudeScan(
+        val topLeft: String?,
+        val topLeftNode: AccessibilityNodeInfo?,
+        val topTexts: List<String>,
+        val target: AccessibilityNodeInfo?,
+        val texts: List<String>,
+    )
+
+    /** Claude の画面を読む: 左上のボタンの名前、上の帯の文字（会話の題名）、title と同じ文字の項目（押せる物）。 */
+    private fun scanClaude(root: AccessibilityNodeInfo, title: String?): ClaudeScan {
+        val dm = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION")
+        getSystemService(android.view.WindowManager::class.java).defaultDisplay.getRealMetrics(dm)
+        val w = dm.widthPixels
+        val h = dm.heightPixels
+        var topLeft: String? = null
+        var topLeftNode: AccessibilityNodeInfo? = null
+        var topLeftX = Int.MAX_VALUE
+        val topTexts = mutableListOf<String>()
+        var exact: AccessibilityNodeInfo? = null
+        var exactY = Int.MAX_VALUE
+        var prefix: AccessibilityNodeInfo? = null
+        var prefixY = Int.MAX_VALUE
+        val texts = mutableListOf<String>()
+        fun walk(node: AccessibilityNodeInfo, ancestors: List<AccessibilityNodeInfo>, depth: Int) {
+            if (depth > 60) return
+            val r = Rect().also { node.getBoundsInScreen(it) }
+            if (node.isVisibleToUser && !r.isEmpty && r.left >= 0 && r.centerY() in 0..h) {
+                val desc = node.contentDescription?.toString()?.replace('\n', ' ')?.trim().orEmpty()
+                val text = node.text?.toString()?.replace('\n', ' ')?.trim().orEmpty()
+                val top = r.centerY() < h * 0.14f
+                if (node.isClickable && top && r.centerX() < w * 0.2f && r.left < topLeftX) {
+                    topLeftX = r.left
+                    topLeft = desc.lowercase(java.util.Locale.ROOT)
+                    topLeftNode = node
+                }
+                if (top && text.isNotEmpty() && r.centerX() > w * 0.14f && r.centerX() < w * 0.86f) topTexts.add(text)
+                if (text.isNotEmpty() && texts.size < 30) texts.add(text.take(16))
+                if (title != null && !top) {
+                    val clickable = (listOf(node) + ancestors.asReversed().take(6)).firstOrNull { it.isClickable }
+                    if (clickable != null) {
+                        if ((text == title || desc == title) && r.top < exactY) { exact = clickable; exactY = r.top }
+                        else if (title.length >= 2 && text.startsWith(title) && text.length <= title.length + 40
+                            && r.top < prefixY) { prefix = clickable; prefixY = r.top }
+                    }
+                }
+            }
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                walk(child, ancestors + node, depth + 1)
+            }
+        }
+        walk(root, emptyList(), 0)
+        return ClaudeScan(topLeft, topLeftNode, topTexts, exact ?: prefix, texts)
+    }
+
+    /**
+     * メニュー（か Code の一覧）で左へなぞった時、メニューを開く前のスレッドへ戻す。引き受けた時 true。
+     * 会話の画面にいる時（左上が「戻る」）は何もしない。
+     */
+    fun returnToClaudeThread(): Boolean {
+        val title = returnTitle ?: return false
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - returnArmedAt > 30 * 60_000L) { returnTitle = null; return false }
+        if (now < returnBusyUntil) return true
+        val root = claudeRoot() ?: return false
+        val scan = scanClaude(root, title)
+        if ((scan.topLeft ?: "") in BACK_LABELS) {
+            // もう会話の画面（メニューから別のスレッドを選んだ等）。覚えた題名は捨てる
+            returnTitle = null
+            sidebarDiag("return skipped (already on a thread: ${scan.topTexts.take(2)})")
+            return false
+        }
+        returnBusyUntil = now + 2500
+        sidebarBusyUntil = 0L
+        hideFreezeFrame(0)
+        val shot = chatSnapshot
+        if (Build.VERSION.SDK_INT >= 30 && shot != null && !shot.isRecycled) {
+            try { showFreezeFrame(shot) {} } catch (e: Exception) { hideFreezeFrame(0) }
+        }
+        sidebarDiag("return to '$title' start (topLeft=${scan.topLeft} image=${freezeView != null})")
+        returnStep(title, now, 0L, 0)
+        return true
+    }
+
+    private fun returnStep(title: String, startedAt: Long, lastClick: Long, wrongBacks: Int) {
+        handler.postDelayed({
+            val now = android.os.SystemClock.uptimeMillis()
+            val waited = now - startedAt
+            fun finish(why: String) {
+                sidebarDiag("return $why +${waited}ms")
+                returnBusyUntil = 0L
+                hideFreezeFrame(100)
+            }
+            updateSidebarForeground(sidebarWindowPackage())
+            if (sidebarForegroundPackage != null && sidebarForegroundPackage != CLAUDE_PACKAGE) {
+                finish("stopped (left Claude)"); return@postDelayed
+            }
+            val root = claudeRoot()
+            if (root == null) {
+                if (waited > 2000) finish("gave up (no window)") else returnStep(title, startedAt, lastClick, wrongBacks)
+                return@postDelayed
+            }
+            val scan = scanClaude(root, title)
+            val onThread = (scan.topLeft ?: "") in BACK_LABELS
+            when {
+                onThread && scan.topTexts.any { it == title } -> { finish("done '$title'"); return@postDelayed }
+                waited > 2000 -> {
+                    finish("gave up topLeft=${scan.topLeft} top=${scan.topTexts.take(3)} texts=${scan.texts.take(12)}")
+                    return@postDelayed
+                }
+                now - lastClick < 450 -> {}
+                // 指を離した所の別のスレッドが開いた時は、戻ってから探す（1回だけ）
+                onThread && wrongBacks < 1 && scan.topLeftNode != null -> {
+                    val ok = try { scan.topLeftNode.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) { false }
+                    sidebarDiag("return: other thread open (${scan.topTexts.take(2)}); back=$ok")
+                    returnStep(title, startedAt, now, wrongBacks + 1); return@postDelayed
+                }
+                !onThread && scan.target != null -> {
+                    val ok = try { scan.target.performAction(AccessibilityNodeInfo.ACTION_CLICK) } catch (_: Exception) { false }
+                    sidebarDiag("return: pressed '$title' ok=$ok +${waited}ms")
+                    returnStep(title, startedAt, now, wrongBacks); return@postDelayed
+                }
+            }
+            returnStep(title, startedAt, lastClick, wrongBacks)
+        }, if (lastClick == 0L && wrongBacks == 0 && android.os.SystemClock.uptimeMillis() - startedAt < 5) 0L else 50L)
+    }
+
     @android.annotation.TargetApi(30)
     private fun freezeScreenThen(next: () -> Unit) {
         if (Build.VERSION.SDK_INT < 30) { next(); return }
@@ -495,9 +695,14 @@ class InputAccessibilityService : AccessibilityService() {
                             catch (_: Exception) { null }
                         try { buffer.close() } catch (_: Exception) {}
                         if (bitmap == null) { proceed("no bitmap"); return }
-                        if (proceeded) { bitmap.recycle(); return }
+                        // 会話の画面の写しは、左なぞりで元のスレッドへ戻す時にもう一度かぶせるので取っておく
+                        keepChatSnapshot(bitmap)
+                        if (proceeded) return
+                        // 前に開いたメニューの写しがあれば、それをすぐ出す（なぞった瞬間にメニューが出たように見せる）
+                        val drawer = drawerSnapshot?.takeIf {
+                            !it.isRecycled && it.width == bitmap.width && it.height == bitmap.height }
                         try {
-                            showFreezeFrame(bitmap) { proceed("shown") }
+                            showFreezeFrame(drawer ?: bitmap) { proceed(if (drawer != null) "shown (menu image)" else "shown") }
                         } catch (e: Exception) {
                             hideFreezeFrame(0)
                             proceed("overlay failed ${e.javaClass.simpleName}")
@@ -565,7 +770,10 @@ class InputAccessibilityService : AccessibilityService() {
         val wm = getSystemService(android.view.WindowManager::class.java)
         val remove = Runnable {
             try { if (view.isAttachedToWindow) wm.removeViewImmediate(view) } catch (_: Exception) {}
-            try { view.setImageDrawable(null); bitmap?.recycle() } catch (_: Exception) {}
+            try {
+                view.setImageDrawable(null)
+                if (bitmap != null && bitmap !== chatSnapshot && bitmap !== drawerSnapshot) bitmap.recycle()
+            } catch (_: Exception) {}
         }
         if (fadeMs <= 0) { remove.run(); return }
         try { view.animate().alpha(0f).setDuration(fadeMs).start() } catch (_: Exception) {}
@@ -578,11 +786,13 @@ class InputAccessibilityService : AccessibilityService() {
         handler.postDelayed({
             if (freezeView == null) { sidebarBusyUntil = 0L; return@postDelayed }
             val waited = android.os.SystemClock.uptimeMillis() - pressedAt
-            val open = waited >= 250 && try { openClaudeSidebar(checkOnly = true) } catch (_: Exception) { false }
-            if (open || waited >= 500) {
-                sidebarDiag("freeze frame release (menu open=$open) +${waited}ms after menu press")
+            val open = waited >= 250 && menuOpenedSinceMenuPress()
+            if (open || waited >= 600) {
+                sidebarDiag("freeze frame release (menu open=$open) +${waited}ms after menu press " +
+                    "new=${lastNavLabels - navLabelsBeforeMenu} before=$navLabelsBeforeMenu")
                 sidebarBusyUntil = 0L
                 hideFreezeFrame(120)
+                if (open) handler.postDelayed({ captureDrawerSnapshot() }, 300)
             } else {
                 releaseFreezeWhenMenuOpen(pressedAt)
             }
@@ -612,6 +822,7 @@ class InputAccessibilityService : AccessibilityService() {
             handler.postDelayed({ openClaudeSidebar(afterBack = afterBack + 1) }, 50)
             return true
         }
+        lastNavLabels = emptySet()
         updateSidebarForeground(sidebarWindowPackage())
         // 画面が切り替わる途中は、前面の窓が一瞬読めないことがある。別のアプリに移った時だけ打ち切る
         if (sidebarForegroundPackage == null && retryAfterBack()) return false
@@ -659,6 +870,8 @@ class InputAccessibilityService : AccessibilityService() {
             var closeMenuVisible = false
             val labelSeen = mutableListOf<String>()
             val labelPos = mutableListOf<Rect>()
+            val navLabels = mutableSetOf<String>()
+            lastNavLabels = navLabels
             fun walk(node: AccessibilityNodeInfo, ancestors: List<AccessibilityNodeInfo>, depth: Int) {
                 if (depth > 60) return
                 val bounds = rect(node)
@@ -674,6 +887,7 @@ class InputAccessibilityService : AccessibilityService() {
                             "メニューを閉じる", "close menu", "close sidebar", "close navigation menu",
                             "サイドバーを閉じる" -> { closeMenuVisible = true; labelSeen.add("$value@$bounds") }
                         }
+                        if (value in NAV_DRAWER_WORDS) navLabels.add(value)
                     }
                 }
                 if (node.isClickable && inTop(node)) topClickables.add(node)
@@ -725,6 +939,7 @@ class InputAccessibilityService : AccessibilityService() {
                 sidebarDiag("ACTION_CLICK named accepted=$clicked")
                 if (clicked) {
                     if (afterBack > 0) {
+                        navLabelsBeforeMenu = navLabels.toSet()
                         val pressedAt = android.os.SystemClock.uptimeMillis()
                         sidebarDiag("after back: menu pressed on try $afterBack +${pressedAt - sidebarBackAt}ms after back")
                         sidebarChainAlive = true
@@ -761,6 +976,11 @@ class InputAccessibilityService : AccessibilityService() {
                     @Suppress("DEPRECATION")
                     val backNode = AccessibilityNodeInfo.obtain(positional)
                     sidebarBusyUntil = android.os.SystemClock.uptimeMillis() + 2500
+                    // メニューの後で左へなぞったら戻るスレッド（会話の画面の上の題名）を覚える
+                    val scan = scanClaude(root, null)
+                    returnTitle = scan.topTexts.firstOrNull()
+                    returnArmedAt = android.os.SystemClock.uptimeMillis()
+                    sidebarDiag("remember thread title='${returnTitle}' top=${scan.topTexts.take(4)}")
                     freezeScreenThen {
                         val clicked = try { backNode.performAction(AccessibilityNodeInfo.ACTION_CLICK) }
                             catch (_: Exception) { false }

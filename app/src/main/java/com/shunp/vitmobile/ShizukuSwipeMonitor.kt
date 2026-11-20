@@ -226,6 +226,12 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                                 parser.earlyLeft = null
                                 main.post {
                                     if (!owner.isClaudeForegroundForShizuku()) return@post
+                                    // VIT がメニューを開いた後の左なぞりは、メニューを開く前のスレッドへ戻す（Code の一覧は出さない。2026-11-20）
+                                    if (owner.returnToClaudeThread()) {
+                                        lastFire = SystemClock.uptimeMillis()
+                                        log("left swipe -> return to the previous thread (early)")
+                                        return@post
+                                    }
                                     // メニューが開いている時の左なぞりは、戻るボタンでメニューを閉じて直前のスレッドへ戻す。
                                     // Claude に任せると、指の下のスレッドが押されたことになり、別のスレッドが開いていた（2026-11-06）
                                     if (owner.openClaudeSidebar(checkOnly = true)) {
@@ -239,6 +245,12 @@ internal class ShizukuSwipeMonitor(private val owner: InputAccessibilityService)
                                 parser.lastLeftSwipe = null
                                 main.post {
                                     if (!owner.isClaudeForegroundForShizuku()) return@post
+                                    // 途中で決まらなかった（縦に揺れた）左なぞりでも、メニューの後なら元のスレッドへ戻す
+                                    if (owner.returnToClaudeThread()) {
+                                        lastFire = SystemClock.uptimeMillis()
+                                        log("left swipe -> return to the previous thread (on lift)")
+                                        return@post
+                                    }
                                     // 表・グラフを左へ送った。次の右なぞりは、送った分を戻す操作として1回だけ開かずに通す。
                                     // 戻す分は1回だけ（足し上げない）。メニューを閉じる左なぞり（開いて3秒以内）は数えない
                                     // （2026-11-06 駿平さん「長文を送って Claude が考えている画面で小さくスワイプしても全く動かない」:
