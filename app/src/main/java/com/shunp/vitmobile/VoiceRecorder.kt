@@ -522,11 +522,13 @@ class VoiceRecorder(private val ctx: Context) {
                 .addFormDataPart("model", model)
                 .addFormDataPart("language", "ja")
                 .addFormDataPart("response_format", "verbose_json")
-            if (dict.isNotEmpty()) {
-                // Whisper の prompt は最大 224 トークン → 安全に 800 文字でクランプ
-                val prompt = if (dict.length > 800) dict.substring(0, 800) else dict
-                builder.addFormDataPart("prompt", prompt)
-            }
+            // 辞書の言葉だけ（カタカナばかり）を渡すと、Whisper が書き方をまねてカタカナで書き起こす（2026-11-20）。
+            // PC 版と同じく、直前の発言（30分以内）＋辞書の言葉を「、」でつないだ物にする（WhisperPrompt）
+            val prev = try {
+                Prefs.getHistory(ctx).maxByOrNull { it.first }
+                    ?.takeIf { System.currentTimeMillis() - it.first < 30 * 60_000L }?.second
+            } catch (_: Throwable) { null }
+            builder.addFormDataPart("prompt", WhisperPrompt.build(prev, dict.lines()))
             val req = Request.Builder()
                 .url("https://api.groq.com/openai/v1/audio/transcriptions")
                 .header("Authorization", "Bearer $key")
