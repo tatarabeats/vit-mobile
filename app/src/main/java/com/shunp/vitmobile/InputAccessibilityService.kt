@@ -604,19 +604,36 @@ class InputAccessibilityService : AccessibilityService() {
      * メニュー（か Code の一覧）で左へなぞった時、メニューを開く前のスレッドへ戻す。引き受けた時 true。
      * 会話の画面にいる時（左上が「戻る」）は何もしない。
      */
+    private val CODE_DRAWER_WORDS = setOf("最近の項目", "スケジュール済みタスク", "dispatch", "新規セッション",
+        "recents", "scheduled tasks", "new session")
+
+    private fun forgetReturn() {
+        returnTitle = null
+        val c = chatSnapshot
+        chatSnapshot = null
+        if (c != null && c !== freezeBitmap) c.recycle()
+    }
+
     fun returnToClaudeThread(): Boolean {
-        val title = returnTitle ?: return false
         val now = android.os.SystemClock.uptimeMillis()
-        if (now - returnArmedAt > 30 * 60_000L) { returnTitle = null; return false }
+        // 早出しと指を離した時の2回目は、戻している最中なので何もしない（戻るボタンを押させない）
         if (now < returnBusyUntil) return true
+        val title = returnTitle ?: return false
+        // 2026-11-20 駿平さん「新しいスレッド開いたのに、前まで開いてたスレッドが表示された」:
+        // 覚えた題名が残ったまま、別の画面（チャット・新しいスレッド）で右→左をしても戻していた。
+        // 戻すのは「VIT がメニューを開いてから2分以内」かつ「今 Code のメニューが開いている」時の1回だけ。
+        if (now - returnArmedAt > 2 * 60_000L) { forgetReturn(); return false }
         val root = claudeRoot() ?: return false
         val scan = scanClaude(root, title)
-        if ((scan.topLeft ?: "") in BACK_LABELS) {
-            // もう会話の画面（メニューから別のスレッドを選んだ等）。覚えた題名は捨てる
-            returnTitle = null
-            sidebarDiag("return skipped (already on a thread: ${scan.topTexts.take(2)})")
+        val tl = scan.topLeft ?: ""
+        val drawerOpen = tl !in BACK_LABELS && tl != "メニューを開く" && tl != "open menu" &&
+            scan.texts.any { it.trim().lowercase() in CODE_DRAWER_WORDS }
+        if (!drawerOpen) {
+            forgetReturn()
+            sidebarDiag("return skipped (menu not open: topLeft=$tl top=${scan.topTexts.take(2)})")
             return false
         }
+        returnTitle = null
         returnBusyUntil = now + 2500
         sidebarBusyUntil = 0L
         hideFreezeFrame(0)
