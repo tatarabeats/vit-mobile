@@ -125,7 +125,7 @@ class VoiceRecorder(private val ctx: Context) {
      */
     private fun textFromVerbose(json: JSONObject): String {
         val whole = json.optString("text").trim()
-        val segments = json.optJSONArray("segments") ?: return whole
+        val segments = json.optJSONArray("segments") ?: return RomajiFilter.filterText(whole)
         val sb = StringBuilder()
         for (i in 0 until segments.length()) {
             val seg = segments.optJSONObject(i) ?: continue
@@ -148,7 +148,8 @@ class VoiceRecorder(private val ctx: Context) {
             }
             sb.append(t)
         }
-        return sb.toString().trim()
+        // 同じ内容のローマ字の文と、その後の同じ文の繰り返しを捨てる（2026-11-21 「sake mirin、sato wo…」）
+        return RomajiFilter.filterText(sb.toString().trim())
     }
 
     /**
