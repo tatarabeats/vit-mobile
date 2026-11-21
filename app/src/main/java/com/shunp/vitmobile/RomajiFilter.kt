@@ -45,13 +45,16 @@ object RomajiFilter {
         if (start < text.length) pieces.add(text.substring(start) to "")
         val sb = StringBuilder()
         var last: String? = null
+        var pending = ""      // 前に残した文の後ろの区切り。間の文を捨てた時は使わない
+        var dropped = false
         for ((p, sep) in pieces) {
-            if (p.isBlank()) { sb.append(p).append(sep); continue }
-            if (isRomaji(p)) continue
             val n = norm(p)
-            if (n.isNotEmpty() && n == last) continue
-            last = n
-            sb.append(p).append(sep)
+            if (p.isNotBlank() && (isRomaji(p) || (n.isNotEmpty() && n == last))) { dropped = true; continue }
+            if (!dropped) sb.append(pending)
+            sb.append(p)
+            pending = sep
+            dropped = false
+            if (n.isNotEmpty()) last = n
         }
         return sb.toString().trim()
     }
