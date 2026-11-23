@@ -123,9 +123,10 @@ class VoiceRecorder(private val ctx: Context) {
      * 「ここは音声ではない」(no_speech_prob 高) かつ「自信がない」(avg_logprob 低) と申告するので、
      * その区間だけ捨てる（2026-08-20）。
      */
-    private fun textFromVerbose(json: JSONObject): String {
+    private fun textFromVerbose(json: JSONObject, dictWords: List<String> = emptyList(), prompt: String? = null): String {
         val whole = json.optString("text").trim()
-        val segments = json.optJSONArray("segments") ?: return RomajiFilter.filterText(whole)
+        val segments = json.optJSONArray("segments")
+            ?: return RomajiFilter.filterText(PromptEcho.stripTrailing(whole, dictWords))
         val sb = StringBuilder()
         for (i in 0 until segments.length()) {
             val seg = segments.optJSONObject(i) ?: continue
@@ -146,10 +147,16 @@ class VoiceRecorder(private val ctx: Context) {
                 android.util.Log.d("VIT", "drop low-confidence segment ($avgLp): $t")
                 continue
             }
+            // 雑音の所で Whisper が prompt（辞書の言葉の並び・直前の発言）を写した区間を捨てる（2026-11-23 PromptEcho）
+            if (PromptEcho.isEcho(t, dictWords, prompt)) {
+                android.util.Log.d("VIT", "drop prompt-echo segment: $t")
+                continue
+            }
             sb.append(t)
         }
+        val joined = PromptEcho.stripTrailing(sb.toString().trim(), dictWords)
         // 同じ内容のローマ字の文と、その後の同じ文の繰り返しを捨てる（2026-11-21 「sake mirin、sato wo…」）
-        return RomajiFilter.filterText(sb.toString().trim())
+        return RomajiFilter.filterText(joined)
     }
 
     /**
@@ -529,7 +536,8 @@ class VoiceRecorder(private val ctx: Context) {
                 Prefs.getHistory(ctx).maxByOrNull { it.first }
                     ?.takeIf { System.currentTimeMillis() - it.first < 30 * 60_000L }?.second
             } catch (_: Throwable) { null }
-            builder.addFormDataPart("prompt", WhisperPrompt.build(prev, dict.lines()))
+            val prompt = WhisperPrompt.build(prev, dict.lines())
+            builder.addFormDataPart("prompt", prompt)
             val req = Request.Builder()
                 .url("https://api.groq.com/openai/v1/audio/transcriptions")
                 .header("Authorization", "Bearer $key")
@@ -543,7 +551,7 @@ class VoiceRecorder(private val ctx: Context) {
                         null
                     } else JSONObject(resp.body?.string() ?: "{}")
                 }
-                if (json != null) return@withContext textFromVerbose(json)
+                if (json != null) return@withContext textFromVerbose(json, dict.lines(), prompt)
             } catch (e: Exception) {
                 android.util.Log.d("VIT", "groq failed model=$model: ${e.message}")
             }
